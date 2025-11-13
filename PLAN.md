@@ -765,6 +765,1254 @@ LOG_LEVEL=info  # debug|info|warn|error
 
 ---
 
+## 🔄 Implementation Flow
+
+This section provides a practical, step-by-step guide for implementing the MCP Codebase Index server.
+
+### Prerequisites
+
+Before starting implementation:
+
+1. **Development Environment**:
+   ```bash
+   node --version  # v18+ required
+   npm --version   # v9+ required
+   git --version   # v2.30+ recommended
+   ```
+
+2. **External Services**:
+   - [ ] Qdrant instance (Docker or Cloud)
+   - [ ] Embedding provider API key (Gemini/OpenAI/Ollama)
+
+3. **Knowledge Requirements**:
+   - TypeScript fundamentals
+   - Async/await patterns
+   - Node.js streams and file I/O
+   - Basic understanding of vector embeddings
+
+---
+
+### Step 1: Project Setup (Day 1)
+
+#### 1.1 Initialize Project
+
+```bash
+# Create project directory
+mkdir mcp-codebase-index
+cd mcp-codebase-index
+
+# Initialize npm project
+npm init -y
+
+# Initialize git
+git init
+echo "node_modules/\n.env\ndist/\n*.log" > .gitignore
+
+# Initialize TypeScript
+npm install -D typescript @types/node
+npx tsc --init --target ES2022 --module NodeNext --moduleResolution NodeNext --strict
+```
+
+#### 1.2 Install Core Dependencies
+
+```bash
+# MCP SDK
+npm install @modelcontextprotocol/sdk
+
+# Tree-sitter and grammars
+npm install tree-sitter web-tree-sitter
+npm install tree-sitter-typescript tree-sitter-javascript tree-sitter-python
+
+# Qdrant client
+npm install @qdrant/js-client-rest
+
+# Embedding providers
+npm install @google/generative-ai openai
+
+# Utilities
+npm install chokidar dotenv zod
+
+# Development
+npm install -D @types/node tsx vitest eslint prettier
+```
+
+#### 1.3 Create Project Structure
+
+```bash
+mkdir -p src/{config,parser/{extractors},embeddings,storage,indexer,search,status,tools,utils,types}
+mkdir -p tests/{unit,integration,fixtures}
+mkdir -p scripts
+```
+
+#### 1.4 Setup Configuration Files
+
+Create `.env.example`:
+```bash
+cat > .env.example << 'EOF'
+EMBEDDING_PROVIDER=gemini
+GEMINI_API_KEY=
+QDRANT_URL=http://localhost:6333
+INDEX_BATCH_SIZE=50
+INDEX_CONCURRENCY=5
+LOG_LEVEL=info
+EOF
+```
+
+Create `tsconfig.json`:
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "tests"]
+}
+```
+
+---
+
+### Step 2: Core Infrastructure (Days 2-3)
+
+#### 2.1 Configuration Manager (`src/config/schema.ts`)
+
+```typescript
+import { z } from 'zod';
+
+export const configSchema = z.object({
+  embedding: z.object({
+    provider: z.enum(['gemini', 'openai', 'ollama', 'openai-compatible']),
+    apiKey: z.string().optional(),
+    baseUrl: z.string().url().optional(),
+    model: z.string().optional(),
+    dimensions: z.number().int().positive(),
+  }),
+  qdrant: z.object({
+    url: z.string().url(),
+    apiKey: z.string().optional(),
+    collectionName: z.string().default('codebase-index'),
+  }),
+  indexing: z.object({
+    batchSize: z.number().int().positive().default(50),
+    concurrency: z.number().int().positive().default(5),
+    maxFileSize: z.number().int().positive().default(1048576),
+  }),
+});
+
+export type Config = z.infer<typeof configSchema>;
+```
+
+#### 2.2 Logging Utility (`src/utils/logger.ts`)
+
+```typescript
+export enum LogLevel {
+  DEBUG = 0,
+  INFO = 1,
+  WARN = 2,
+  ERROR = 3,
+}
+
+export class Logger {
+  constructor(private level: LogLevel = LogLevel.INFO) {}
+
+  debug(message: string, ...args: any[]) {
+    if (this.level <= LogLevel.DEBUG) console.debug(`[DEBUG] ${message}`, ...args);
+  }
+
+  info(message: string, ...args: any[]) {
+    if (this.level <= LogLevel.INFO) console.info(`[INFO] ${message}`, ...args);
+  }
+
+  warn(message: string, ...args: any[]) {
+    if (this.level <= LogLevel.WARN) console.warn(`[WARN] ${message}`, ...args);
+  }
+
+  error(message: string, ...args: any[]) {
+    if (this.level <= LogLevel.ERROR) console.error(`[ERROR] ${message}`, ...args);
+  }
+}
+
+export const logger = new Logger();
+```
+
+#### 2.3 Basic MCP Server (`src/index.ts`)
+
+```typescript
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { logger } from './utils/logger.js';
+
+async function main() {
+  const server = new Server(
+    {
+      name: 'mcp-codebase-index',
+      version: '0.1.0',
+    },
+    {
+      capabilities: {
+        tools: {},
+      },
+    }
+  );
+
+  // Tool handlers will be added here
+
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+
+  logger.info('MCP Codebase Index server started');
+}
+
+main().catch(console.error);
+```
+
+**Test it**:
+```bash
+npx tsx src/index.ts
+# Should start without errors
+```
+
+---
+
+### Step 3: Parser Module (Days 4-7)
+
+#### 3.1 Language Registry (`src/parser/language-registry.ts`)
+
+```typescript
+import Parser from 'tree-sitter';
+import TypeScript from 'tree-sitter-typescript';
+import JavaScript from 'tree-sitter-javascript';
+import Python from 'tree-sitter-python';
+
+export class LanguageRegistry {
+  private parsers = new Map<string, Parser>();
+
+  constructor() {
+    this.registerLanguage('typescript', TypeScript.typescript);
+    this.registerLanguage('javascript', JavaScript);
+    this.registerLanguage('python', Python);
+  }
+
+  private registerLanguage(name: string, grammar: any) {
+    const parser = new Parser();
+    parser.setLanguage(grammar);
+    this.parsers.set(name, parser);
+  }
+
+  getParser(language: string): Parser | undefined {
+    return this.parsers.get(language);
+  }
+
+  detectLanguage(filePath: string): string | undefined {
+    const ext = filePath.split('.').pop()?.toLowerCase();
+    const languageMap: Record<string, string> = {
+      'ts': 'typescript',
+      'tsx': 'typescript',
+      'js': 'javascript',
+      'jsx': 'javascript',
+      'py': 'python',
+    };
+    return languageMap[ext || ''];
+  }
+}
+```
+
+#### 3.2 Base Extractor (`src/parser/extractors/base.ts`)
+
+```typescript
+export interface CodeBlock {
+  type: 'function' | 'class' | 'method';
+  name: string;
+  code: string;
+  lineStart: number;
+  lineEnd: number;
+  signature?: string;
+  docstring?: string;
+}
+
+export interface Extractor {
+  extract(sourceCode: string, filePath: string): Promise<CodeBlock[]>;
+}
+```
+
+#### 3.3 TypeScript Extractor (`src/parser/extractors/typescript.ts`)
+
+```typescript
+import Parser from 'tree-sitter';
+import { Extractor, CodeBlock } from './base.js';
+
+export class TypeScriptExtractor implements Extractor {
+  constructor(private parser: Parser) {}
+
+  async extract(sourceCode: string, filePath: string): Promise<CodeBlock[]> {
+    const tree = this.parser.parse(sourceCode);
+    const blocks: CodeBlock[] = [];
+
+    const traverse = (node: Parser.SyntaxNode) => {
+      // Extract functions
+      if (node.type === 'function_declaration') {
+        blocks.push({
+          type: 'function',
+          name: node.childForFieldName('name')?.text || 'anonymous',
+          code: node.text,
+          lineStart: node.startPosition.row + 1,
+          lineEnd: node.endPosition.row + 1,
+        });
+      }
+
+      // Extract classes
+      if (node.type === 'class_declaration') {
+        blocks.push({
+          type: 'class',
+          name: node.childForFieldName('name')?.text || 'anonymous',
+          code: node.text,
+          lineStart: node.startPosition.row + 1,
+          lineEnd: node.endPosition.row + 1,
+        });
+      }
+
+      // Recurse
+      for (const child of node.children) {
+        traverse(child);
+      }
+    };
+
+    traverse(tree.rootNode);
+    return blocks;
+  }
+}
+```
+
+**Test parser**:
+```bash
+# Create test file: tests/unit/parser.test.ts
+npm run test
+```
+
+---
+
+### Step 4: Embedding Providers (Days 8-10)
+
+#### 4.1 Base Provider (`src/embeddings/base.ts`)
+
+```typescript
+export interface EmbeddingProvider {
+  embed(text: string): Promise<number[]>;
+  embedBatch(texts: string[]): Promise<number[][]>;
+  getDimensions(): number;
+}
+```
+
+#### 4.2 Gemini Provider (`src/embeddings/gemini.ts`)
+
+```typescript
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { EmbeddingProvider } from './base.js';
+
+export class GeminiProvider implements EmbeddingProvider {
+  private client: GoogleGenerativeAI;
+  private model: any;
+
+  constructor(apiKey: string) {
+    this.client = new GoogleGenerativeAI(apiKey);
+    this.model = this.client.getGenerativeModel({ model: 'text-embedding-004' });
+  }
+
+  async embed(text: string): Promise<number[]> {
+    const result = await this.model.embedContent(text);
+    return result.embedding.values;
+  }
+
+  async embedBatch(texts: string[]): Promise<number[][]> {
+    const results = await Promise.all(texts.map(t => this.embed(t)));
+    return results;
+  }
+
+  getDimensions(): number {
+    return 768;
+  }
+}
+```
+
+**Test embedding**:
+```bash
+# Create simple test script
+npx tsx scripts/test-embedding.ts
+```
+
+---
+
+### Step 5: Vector Storage (Days 11-13)
+
+#### 5.1 Qdrant Client (`src/storage/qdrant-client.ts`)
+
+```typescript
+import { QdrantClient } from '@qdrant/js-client-rest';
+
+export class QdrantStorage {
+  private client: QdrantClient;
+
+  constructor(url: string, apiKey?: string) {
+    this.client = new QdrantClient({ url, apiKey });
+  }
+
+  async createCollection(name: string, dimension: number) {
+    await this.client.createCollection(name, {
+      vectors: { size: dimension, distance: 'Cosine' },
+    });
+  }
+
+  async upsert(collectionName: string, points: any[]) {
+    await this.client.upsert(collectionName, { points });
+  }
+
+  async search(collectionName: string, vector: number[], limit: number = 10) {
+    return await this.client.search(collectionName, {
+      vector,
+      limit,
+      with_payload: true,
+    });
+  }
+}
+```
+
+**Test Qdrant**:
+```bash
+# Start Qdrant in Docker
+docker run -p 6333:6333 qdrant/qdrant
+
+# Test connection
+npx tsx scripts/test-qdrant.ts
+```
+
+---
+
+### Step 6: Indexing Engine (Days 14-17)
+
+#### 6.1 Simple Indexer (`src/indexer/index.ts`)
+
+```typescript
+import { LanguageRegistry } from '../parser/language-registry.js';
+import { EmbeddingProvider } from '../embeddings/base.js';
+import { QdrantStorage } from '../storage/qdrant-client.js';
+import { glob } from 'glob';
+
+export class Indexer {
+  constructor(
+    private registry: LanguageRegistry,
+    private embedder: EmbeddingProvider,
+    private storage: QdrantStorage
+  ) {}
+
+  async indexDirectory(directory: string) {
+    // Find all files
+    const files = await glob(`${directory}/**/*.{ts,js,py}`, {
+      ignore: ['**/node_modules/**', '**/.git/**'],
+    });
+
+    console.log(`Found ${files.length} files to index`);
+
+    for (const file of files) {
+      await this.indexFile(file);
+    }
+  }
+
+  private async indexFile(filePath: string) {
+    // Detect language
+    const language = this.registry.detectLanguage(filePath);
+    if (!language) return;
+
+    const parser = this.registry.getParser(language);
+    if (!parser) return;
+
+    // Read file
+    const fs = await import('fs/promises');
+    const content = await fs.readFile(filePath, 'utf-8');
+
+    // Parse and extract blocks
+    const extractor = /* get appropriate extractor */;
+    const blocks = await extractor.extract(content, filePath);
+
+    // Generate embeddings and store
+    for (const block of blocks) {
+      const embedding = await this.embedder.embed(block.code);
+      await this.storage.upsert('codebase-index', [{
+        id: `${filePath}:${block.lineStart}`,
+        vector: embedding,
+        payload: {
+          file: filePath,
+          type: block.type,
+          name: block.name,
+          code: block.code,
+          lineStart: block.lineStart,
+          lineEnd: block.lineEnd,
+        },
+      }]);
+    }
+
+    console.log(`Indexed ${filePath}: ${blocks.length} blocks`);
+  }
+}
+```
+
+---
+
+### Step 7: MCP Tools (Days 18-20)
+
+#### 7.1 Search Tool (`src/tools/codebase-search.ts`)
+
+```typescript
+export const codebaseSearchTool = {
+  name: 'codebase_search',
+  description: 'Search the codebase using semantic search',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Search query' },
+      limit: { type: 'number', description: 'Max results', default: 10 },
+    },
+    required: ['query'],
+  },
+};
+
+export async function handleCodebaseSearch(args: any) {
+  const { query, limit = 10 } = args;
+
+  // Generate query embedding
+  const queryVector = await embedder.embed(query);
+
+  // Search Qdrant
+  const results = await storage.search('codebase-index', queryVector, limit);
+
+  // Format results
+  return {
+    results: results.map(r => ({
+      file: r.payload.file,
+      code: r.payload.code,
+      score: r.score,
+      line: r.payload.lineStart,
+    })),
+  };
+}
+```
+
+#### 7.2 Register Tools in Server
+
+```typescript
+// In src/index.ts
+server.setRequestHandler('tools/list', async () => ({
+  tools: [
+    codebaseSearchTool,
+    indexingStatusTool,
+    reindexTool,
+  ],
+}));
+
+server.setRequestHandler('tools/call', async (request) => {
+  const { name, arguments: args } = request.params;
+
+  if (name === 'codebase_search') {
+    return await handleCodebaseSearch(args);
+  }
+  // ... other tools
+});
+```
+
+---
+
+### Step 8: Testing & Validation (Days 21-25)
+
+#### 8.1 Unit Tests
+
+```typescript
+// tests/unit/parser.test.ts
+import { describe, it, expect } from 'vitest';
+import { TypeScriptExtractor } from '../../src/parser/extractors/typescript';
+
+describe('TypeScriptExtractor', () => {
+  it('should extract functions', async () => {
+    const code = `
+      function hello() {
+        console.log('Hello');
+      }
+    `;
+
+    const extractor = new TypeScriptExtractor(/* parser */);
+    const blocks = await extractor.extract(code, 'test.ts');
+
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('function');
+    expect(blocks[0].name).toBe('hello');
+  });
+});
+```
+
+#### 8.2 Integration Test
+
+```bash
+# Create test repository
+mkdir test-repo
+cd test-repo
+echo "function test() { return 42; }" > index.ts
+
+# Index it
+npx tsx ../src/cli.ts index ./test-repo
+
+# Search it
+npx tsx ../src/cli.ts search "test function"
+```
+
+---
+
+### Step 9: Documentation (Days 26-28)
+
+#### 9.1 README.md
+
+Create comprehensive README with:
+- Quick start guide
+- Installation instructions
+- Configuration examples
+- Usage examples
+- Troubleshooting
+
+#### 9.2 API Documentation
+
+Generate TypeDoc or document manually:
+```bash
+npm install -D typedoc
+npx typedoc --out docs src
+```
+
+---
+
+### Step 10: Package & Release (Days 29-30)
+
+#### 10.1 Prepare package.json
+
+```json
+{
+  "name": "mcp-codebase-index",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "mcp-codebase-index": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest",
+    "prepublishOnly": "npm run build"
+  }
+}
+```
+
+#### 10.2 Build and Test
+
+```bash
+npm run build
+npm test
+npm pack  # Test package locally
+```
+
+#### 10.3 Publish
+
+```bash
+npm login
+npm publish
+```
+
+---
+
+### Implementation Checklist
+
+Use this checklist to track progress:
+
+**Phase 1: Foundation**
+- [ ] Project initialized
+- [ ] Dependencies installed
+- [ ] Configuration system working
+- [ ] Basic MCP server responds
+- [ ] Logging utility functional
+
+**Phase 2: Parser**
+- [ ] Language registry implemented
+- [ ] TypeScript extractor working
+- [ ] Python extractor working
+- [ ] Markdown parser implemented
+- [ ] Fallback chunker implemented
+- [ ] File filtering (.gitignore, .mcpignore)
+
+**Phase 3: Embeddings**
+- [ ] Gemini provider working
+- [ ] OpenAI provider working
+- [ ] Ollama provider working
+- [ ] Batch processing implemented
+- [ ] Error handling and retries
+
+**Phase 4: Storage**
+- [ ] Qdrant client connected
+- [ ] Collection creation working
+- [ ] Vector upsert functional
+- [ ] Search queries working
+
+**Phase 5: Indexing**
+- [ ] File discovery working
+- [ ] Parse → Embed → Store pipeline
+- [ ] Batch processing
+- [ ] Progress tracking
+- [ ] Error handling
+- [ ] Incremental updates
+- [ ] Git branch detection
+
+**Phase 6: Search**
+- [ ] Query embedding generation
+- [ ] Vector search working
+- [ ] Result ranking
+- [ ] Context extraction
+- [ ] Filters (path, language, etc.)
+
+**Phase 7: MCP Tools**
+- [ ] codebase_search tool
+- [ ] indexing_status tool
+- [ ] reindex tool
+- [ ] configure_indexer tool
+- [ ] clear_index tool
+- [ ] validate_config tool
+
+**Phase 8: Testing**
+- [ ] Unit tests (80%+ coverage)
+- [ ] Integration tests
+- [ ] Performance benchmarks
+- [ ] Edge case handling
+
+**Phase 9: Documentation**
+- [ ] README.md
+- [ ] API documentation
+- [ ] Troubleshooting guide
+- [ ] Usage examples
+
+**Phase 10: Release**
+- [ ] npm package published
+- [ ] GitHub release created
+- [ ] Example projects
+
+---
+
+## 📐 Development Guidelines
+
+### Code Style & Conventions
+
+#### 1. TypeScript Best Practices
+
+```typescript
+// ✅ GOOD: Use explicit types
+function processFile(filePath: string): Promise<CodeBlock[]> {
+  // ...
+}
+
+// ❌ BAD: Implicit any
+function processFile(filePath) {
+  // ...
+}
+
+// ✅ GOOD: Use interfaces for structured data
+interface SearchResult {
+  file: string;
+  score: number;
+  code: string;
+}
+
+// ❌ BAD: Using any or unknown without narrowing
+const results: any[] = await search();
+```
+
+#### 2. Async/Await Patterns
+
+```typescript
+// ✅ GOOD: Proper error handling
+async function indexFile(path: string): Promise<void> {
+  try {
+    const content = await fs.readFile(path, 'utf-8');
+    await processContent(content);
+  } catch (error) {
+    logger.error(`Failed to index ${path}:`, error);
+    throw new IndexingError(`Cannot index ${path}`, { cause: error });
+  }
+}
+
+// ❌ BAD: Unhandled promise rejection
+async function indexFile(path: string) {
+  const content = await fs.readFile(path, 'utf-8');
+  await processContent(content);  // No error handling
+}
+
+// ✅ GOOD: Parallel execution where possible
+const results = await Promise.all(files.map(f => indexFile(f)));
+
+// ❌ BAD: Sequential when parallel is possible
+for (const file of files) {
+  await indexFile(file);  // Slow!
+}
+```
+
+#### 3. Error Handling
+
+```typescript
+// Create custom error classes
+export class IndexingError extends Error {
+  constructor(message: string, public readonly context?: any) {
+    super(message);
+    this.name = 'IndexingError';
+  }
+}
+
+// Use error classes
+if (!file.exists) {
+  throw new IndexingError(`File not found: ${file.path}`, {
+    path: file.path,
+    operation: 'index',
+  });
+}
+
+// Handle errors at boundaries
+try {
+  await indexer.run();
+} catch (error) {
+  if (error instanceof IndexingError) {
+    logger.error('Indexing failed:', error.message, error.context);
+  } else {
+    logger.error('Unexpected error:', error);
+  }
+}
+```
+
+#### 4. Resource Management
+
+```typescript
+// ✅ GOOD: Clean up resources
+async function processLargeFile(path: string) {
+  const stream = fs.createReadStream(path);
+  try {
+    await processStream(stream);
+  } finally {
+    stream.close();
+  }
+}
+
+// ✅ GOOD: Limit concurrent operations
+import pLimit from 'p-limit';
+
+const limit = pLimit(5);  // Max 5 concurrent
+const results = await Promise.all(
+  files.map(f => limit(() => indexFile(f)))
+);
+```
+
+#### 5. Logging Standards
+
+```typescript
+// ✅ GOOD: Structured logging with context
+logger.info('Indexing file', {
+  file: filePath,
+  size: stats.size,
+  language,
+});
+
+// ✅ GOOD: Appropriate log levels
+logger.debug('Parsed AST node', { type: node.type });  // Verbose
+logger.info('File indexed successfully', { file });    // Important
+logger.warn('File skipped', { file, reason });         // Attention needed
+logger.error('Indexing failed', { file, error });      // Failure
+
+// ❌ BAD: No context
+logger.info('Processing...');
+logger.error('Failed');
+```
+
+---
+
+### Testing Guidelines
+
+#### 1. Unit Test Structure
+
+```typescript
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+
+describe('TypeScriptExtractor', () => {
+  let extractor: TypeScriptExtractor;
+
+  beforeEach(() => {
+    extractor = new TypeScriptExtractor(/* deps */);
+  });
+
+  describe('extract()', () => {
+    it('should extract function declarations', async () => {
+      const code = 'function test() {}';
+      const blocks = await extractor.extract(code, 'test.ts');
+
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0]).toMatchObject({
+        type: 'function',
+        name: 'test',
+      });
+    });
+
+    it('should handle syntax errors gracefully', async () => {
+      const code = 'function test(';  // Invalid
+      await expect(extractor.extract(code, 'test.ts'))
+        .resolves.toEqual([]);  // Should not throw
+    });
+  });
+});
+```
+
+#### 2. Integration Test Patterns
+
+```typescript
+describe('Indexing Pipeline', () => {
+  it('should index a small project end-to-end', async () => {
+    // Setup: Create test files
+    const testDir = await createTestDirectory({
+      'src/index.ts': 'function main() {}',
+      'src/utils.ts': 'export const helper = () => {}',
+    });
+
+    // Execute: Run indexing
+    const indexer = new Indexer(/* config */);
+    await indexer.indexDirectory(testDir);
+
+    // Verify: Check results
+    const results = await search('helper function');
+    expect(results).toHaveLength(1);
+    expect(results[0].file).toContain('utils.ts');
+
+    // Cleanup
+    await fs.rm(testDir, { recursive: true });
+  });
+});
+```
+
+#### 3. Mocking External Services
+
+```typescript
+import { vi } from 'vitest';
+
+describe('EmbeddingProvider', () => {
+  it('should retry on rate limit', async () => {
+    const mockApi = vi.fn()
+      .mockRejectedValueOnce(new Error('Rate limit'))
+      .mockResolvedValueOnce({ embedding: [0.1, 0.2] });
+
+    const provider = new GeminiProvider(mockApi);
+    const result = await provider.embed('test');
+
+    expect(mockApi).toHaveBeenCalledTimes(2);
+    expect(result).toEqual([0.1, 0.2]);
+  });
+});
+```
+
+---
+
+### Performance Guidelines
+
+#### 1. Batch Processing
+
+```typescript
+// ✅ GOOD: Batch requests
+async function embedBlocks(blocks: CodeBlock[]) {
+  const BATCH_SIZE = 50;
+  const batches = chunk(blocks, BATCH_SIZE);
+
+  for (const batch of batches) {
+    const texts = batch.map(b => b.code);
+    const embeddings = await embedder.embedBatch(texts);
+    await storeBatch(batch, embeddings);
+  }
+}
+
+// ❌ BAD: One at a time
+for (const block of blocks) {
+  const embedding = await embedder.embed(block.code);
+  await store(block, embedding);
+}
+```
+
+#### 2. Caching
+
+```typescript
+// Implement simple cache
+class EmbeddingCache {
+  private cache = new Map<string, number[]>();
+
+  async get(text: string): Promise<number[] | undefined> {
+    return this.cache.get(text);
+  }
+
+  set(text: string, embedding: number[]): void {
+    if (this.cache.size > 10000) {
+      // LRU eviction logic
+    }
+    this.cache.set(text, embedding);
+  }
+}
+```
+
+#### 3. Memory Management
+
+```typescript
+// ✅ GOOD: Stream large files
+async function processLargeFile(path: string) {
+  const stream = fs.createReadStream(path);
+  const chunks: string[] = [];
+
+  for await (const chunk of stream) {
+    chunks.push(chunk.toString());
+
+    if (chunks.length >= 100) {
+      await processChunks(chunks);
+      chunks.length = 0;  // Clear
+    }
+  }
+}
+
+// ❌ BAD: Load entire file
+const content = await fs.readFile(path, 'utf-8');
+// Memory spike for large files
+```
+
+---
+
+### Security Guidelines
+
+#### 1. Input Validation
+
+```typescript
+import { z } from 'zod';
+
+// Validate all external inputs
+const searchSchema = z.object({
+  query: z.string().min(1).max(500),
+  limit: z.number().int().min(1).max(100),
+  paths: z.array(z.string()).optional(),
+});
+
+export async function search(input: unknown) {
+  const validated = searchSchema.parse(input);
+  // Now use validated.query safely
+}
+```
+
+#### 2. Path Sanitization
+
+```typescript
+import path from 'path';
+
+// ✅ GOOD: Prevent directory traversal
+function validatePath(inputPath: string, baseDir: string): string {
+  const resolved = path.resolve(baseDir, inputPath);
+  if (!resolved.startsWith(path.resolve(baseDir))) {
+    throw new SecurityError('Invalid path: directory traversal detected');
+  }
+  return resolved;
+}
+
+// ❌ BAD: Direct path usage
+const content = await fs.readFile(userProvidedPath);  // Dangerous!
+```
+
+#### 3. API Key Handling
+
+```typescript
+// ✅ GOOD: Never log secrets
+logger.info('Using Gemini provider', {
+  apiKey: '***REDACTED***',  // Or omit entirely
+});
+
+// ❌ BAD: Exposing secrets
+logger.info('API Key:', process.env.GEMINI_API_KEY);  // Never do this!
+
+// ✅ GOOD: Validate key format
+function validateApiKey(key: string): boolean {
+  return /^[A-Za-z0-9_-]{20,}$/.test(key);
+}
+```
+
+---
+
+### Git Workflow
+
+#### 1. Branch Naming
+
+```bash
+# Feature branches
+git checkout -b feature/markdown-parser
+git checkout -b feature/ollama-provider
+
+# Bug fixes
+git checkout -b fix/rate-limit-retry
+git checkout -b fix/memory-leak-large-files
+
+# Refactoring
+git checkout -b refactor/parser-extractors
+```
+
+#### 2. Commit Messages
+
+```bash
+# ✅ GOOD: Descriptive commits
+git commit -m "feat: add Markdown header-based parsing
+
+- Implement MarkdownParser class
+- Extract sections by H1, H2, H3 headers
+- Add tests for nested headers
+- Update config schema with markdownHeaderParsing option"
+
+# ✅ GOOD: Bug fix commit
+git commit -m "fix: handle rate limit errors in Gemini provider
+
+- Add exponential backoff retry logic
+- Max 5 retries with 2s, 4s, 8s, 16s, 32s delays
+- Log warnings on retry attempts
+- Fixes #42"
+
+# ❌ BAD: Vague commits
+git commit -m "updates"
+git commit -m "fix stuff"
+```
+
+#### 3. Pull Request Template
+
+```markdown
+## Description
+Brief description of changes
+
+## Type of Change
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Breaking change
+- [ ] Documentation update
+
+## Testing
+- [ ] Unit tests pass
+- [ ] Integration tests pass
+- [ ] Manual testing completed
+
+## Checklist
+- [ ] Code follows style guidelines
+- [ ] Self-review completed
+- [ ] Comments added for complex logic
+- [ ] Documentation updated
+- [ ] No new warnings
+```
+
+---
+
+### Documentation Standards
+
+#### 1. Code Documentation
+
+```typescript
+/**
+ * Extracts semantic code blocks from TypeScript source files.
+ *
+ * @param sourceCode - The TypeScript source code to parse
+ * @param filePath - Path to the source file (for error reporting)
+ * @returns Array of extracted code blocks (functions, classes, methods)
+ * @throws {ParsingError} If the source code has syntax errors
+ *
+ * @example
+ * ```typescript
+ * const extractor = new TypeScriptExtractor(parser);
+ * const blocks = await extractor.extract(code, 'src/index.ts');
+ * console.log(`Found ${blocks.length} code blocks`);
+ * ```
+ */
+async extract(sourceCode: string, filePath: string): Promise<CodeBlock[]> {
+  // Implementation
+}
+```
+
+#### 2. README Sections
+
+Every module should have a README with:
+- **Purpose**: What this module does
+- **Usage**: Code examples
+- **API**: Public functions/classes
+- **Configuration**: Options and defaults
+- **Limitations**: Known issues or constraints
+
+---
+
+### Common Pitfalls to Avoid
+
+#### 1. Race Conditions
+
+```typescript
+// ❌ BAD: Race condition
+let counter = 0;
+await Promise.all(files.map(async f => {
+  await processFile(f);
+  counter++;  // Unsafe!
+}));
+
+// ✅ GOOD: Use proper aggregation
+const results = await Promise.all(files.map(f => processFile(f)));
+const counter = results.length;
+```
+
+#### 2. Memory Leaks
+
+```typescript
+// ❌ BAD: Growing cache without limits
+class Cache {
+  private data = new Map();
+  set(key, value) {
+    this.data.set(key, value);  // Never evicts!
+  }
+}
+
+// ✅ GOOD: Implement LRU or size limits
+class LRUCache {
+  constructor(private maxSize: number) {}
+
+  set(key, value) {
+    if (this.cache.size >= this.maxSize) {
+      const firstKey = this.cache.keys().next().value;
+      this.cache.delete(firstKey);
+    }
+    this.cache.set(key, value);
+  }
+}
+```
+
+#### 3. Unhandled Rejections
+
+```typescript
+// ❌ BAD: Silent failures
+Promise.all(tasks);  // Errors not caught
+
+// ✅ GOOD: Always handle promises
+Promise.all(tasks).catch(error => {
+  logger.error('Tasks failed:', error);
+});
+
+// ✅ BETTER: Use top-level error handler
+process.on('unhandledRejection', (error) => {
+  logger.error('Unhandled rejection:', error);
+  process.exit(1);
+});
+```
+
+---
+
 ## 🎨 Key Design Decisions
 
 ### 1. Parsing Granularity

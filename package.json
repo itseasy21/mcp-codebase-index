@@ -19,7 +19,11 @@
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "npm run build && changeset publish",
+    "prepublishOnly": "npm run build && npm run typecheck && npm test"
   },
   "keywords": [
     "mcp",
@@ -31,10 +35,32 @@
     "qdrant",
     "vector-database",
     "claude",
-    "ai"
+    "ai",
+    "code-indexing",
+    "vector-search",
+    "codebase-search"
   ],
-  "author": "",
+  "author": "MCP Codebase Index Contributors",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/itseasy21/mcp-codebase-index.git"
+  },
+  "bugs": {
+    "url": "https://github.com/itseasy21/mcp-codebase-index/issues"
+  },
+  "homepage": "https://github.com/itseasy21/mcp-codebase-index#readme",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "USAGE.md",
+    "API.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
     "@modelcontextprotocol/sdk": "^1.0.4",
@@ -58,6 +84,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.29.7",
     "@types/node": "^22.10.1",
     "@typescript-eslint/eslint-plugin": "^8.16.0",
     "@typescript-eslint/parser": "^8.16.0",

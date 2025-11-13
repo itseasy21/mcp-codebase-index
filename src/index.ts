@@ -32,7 +32,7 @@ async function main(): Promise<void> {
     });
 
     // Create server
-    const server = createServer(config);
+    const { server, orchestrator } = createServer(config);
 
     // Create transport
     const transport = new StdioServerTransport();
@@ -50,13 +50,21 @@ async function main(): Promise<void> {
     logger.info(`  Qdrant URL: ${config.qdrant.url}`);
     logger.info(`  Collection: ${config.qdrant.collectionName}`);
 
-    // Keep the process running
-    process.on('SIGTERM', () => {
-      logger.info('Received SIGTERM, shutting down gracefully...');
-      server.close().then(() => {
+    // Graceful shutdown handlers
+    const shutdown = async (signal: string) => {
+      try {
+        logger.info(`Received ${signal}, shutting down gracefully...`);
+        await orchestrator.shutdown();
+        await server.close();
         process.exit(0);
-      });
-    });
+      } catch (error) {
+        logger.error(`Error during ${signal} shutdown:`, formatError(error));
+        process.exit(1);
+      }
+    };
+
+    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
   } catch (error) {
     logger.error('Failed to start server:', formatError(error));
     if (error instanceof Error && error.stack) {

@@ -13,7 +13,7 @@ export const configSchema = z.object({
   embedding: z.object({
     provider: z.enum(['gemini', 'openai', 'ollama', 'openai-compatible']),
     apiKey: z.string().optional(),
-    baseUrl: z.string().url().optional(),
+    baseUrl: z.string().optional(), // Allow both full URLs and paths for Ollama
     model: z.string().optional(),
     dimensions: z.number().int().positive().default(768),
     chunkSize: z.number().int().positive().default(512),

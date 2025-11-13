@@ -76,7 +76,8 @@ export interface VectorMetadata {
   language: string;
   hash: string;
   indexed_at: string;
-  [key: string]: any;
+  complexity?: number;
+  metadata?: Record<string, string | number | boolean | null>;
 }
 
 /**

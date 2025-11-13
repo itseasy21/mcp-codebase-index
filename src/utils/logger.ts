@@ -85,11 +85,10 @@ export class Logger {
 
   /**
    * Log error message
+   * Errors are always logged regardless of level
    */
   error(message: string, ...args: any[]): void {
-    if (this.level <= LogLevel.ERROR) {
-      console.error(this.format('ERROR', message), ...args);
-    }
+    console.error(this.format('ERROR', message), ...args);
   }
 
   /**

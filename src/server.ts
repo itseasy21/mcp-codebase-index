@@ -17,9 +17,61 @@ import type { ProviderConfig } from './embeddings/types.js';
 import { Storage } from './storage/index.js';
 
 /**
+ * Tool argument types
+ */
+interface CodebaseSearchArgs {
+  query: string;
+  limit?: number;
+  threshold?: number;
+  fileTypes?: string[];
+  paths?: string[];
+  languages?: string[];
+  includeContext?: boolean;
+  contextLines?: number;
+}
+
+interface IndexingStatusArgs {
+  detailed?: boolean;
+}
+
+interface ReindexArgs {
+  mode?: 'full' | 'incremental' | 'file';
+  paths?: string[];
+  force?: boolean;
+}
+
+interface ConfigureIndexerArgs {
+  provider?: 'gemini' | 'openai' | 'ollama' | 'openai-compatible';
+  providerConfig?: {
+    apiKey?: string;
+    baseUrl?: string;
+    model?: string;
+  };
+  qdrantConfig?: {
+    url?: string;
+    apiKey?: string;
+  };
+  indexingConfig?: {
+    batchSize?: number;
+    concurrency?: number;
+    excludePatterns?: string[];
+  };
+  validate?: boolean;
+}
+
+interface ClearIndexArgs {
+  confirm: boolean;
+  workspace?: string;
+}
+
+interface ValidateConfigArgs {
+  component?: 'qdrant' | 'embedder' | 'all';
+}
+
+/**
  * Create and configure the MCP server
  */
-export function createServer(config: Config): Server {
+export function createServer(config: Config): { server: Server; orchestrator: Orchestrator } {
   const server = new Server(
     {
       name: 'mcp-codebase-index',
@@ -48,14 +100,7 @@ export function createServer(config: Config): Server {
     logger.error('Server error:', formatError(error));
   };
 
-  process.on('SIGINT', async () => {
-    logger.info('Shutting down server...');
-    await orchestrator.shutdown();
-    await server.close();
-    process.exit(0);
-  });
-
-  return server;
+  return { server, orchestrator };
 }
 
 /**
@@ -239,22 +284,22 @@ function registerToolHandlers(server: Server, orchestrator: Orchestrator): void 
     try {
       switch (name) {
         case 'codebase_search':
-          return await handleCodebaseSearch(orchestrator, args);
+          return await handleCodebaseSearch(orchestrator, (args || {}) as unknown as CodebaseSearchArgs);
 
         case 'indexing_status':
-          return await handleIndexingStatus(orchestrator, args);
+          return await handleIndexingStatus(orchestrator, (args || {}) as unknown as IndexingStatusArgs);
 
         case 'reindex':
-          return await handleReindex(orchestrator, args);
+          return await handleReindex(orchestrator, (args || {}) as unknown as ReindexArgs);
 
         case 'configure_indexer':
-          return await handleConfigureIndexer(orchestrator, args);
+          return await handleConfigureIndexer(orchestrator, (args || {}) as unknown as ConfigureIndexerArgs);
 
         case 'clear_index':
-          return await handleClearIndex(orchestrator, args);
+          return await handleClearIndex(orchestrator, (args || {}) as unknown as ClearIndexArgs);
 
         case 'validate_config':
-          return await handleValidateConfig(orchestrator, args);
+          return await handleValidateConfig(orchestrator, (args || {}) as unknown as ValidateConfigArgs);
 
         default:
           throw new Error(`Unknown tool: ${name}`);
@@ -277,7 +322,7 @@ function registerToolHandlers(server: Server, orchestrator: Orchestrator): void 
  * Tool handler implementations
  */
 
-async function handleCodebaseSearch(orchestrator: Orchestrator, args: any) {
+async function handleCodebaseSearch(orchestrator: Orchestrator, args: CodebaseSearchArgs) {
   if (!orchestrator.isInitialized()) {
     return {
       content: [
@@ -352,7 +397,7 @@ async function handleCodebaseSearch(orchestrator: Orchestrator, args: any) {
   };
 }
 
-async function handleIndexingStatus(orchestrator: Orchestrator, args: any) {
+async function handleIndexingStatus(orchestrator: Orchestrator, args: IndexingStatusArgs) {
   if (!orchestrator.isInitialized()) {
     return {
       content: [
@@ -465,7 +510,7 @@ async function handleIndexingStatus(orchestrator: Orchestrator, args: any) {
   };
 }
 
-async function handleReindex(orchestrator: Orchestrator, args: any) {
+async function handleReindex(orchestrator: Orchestrator, args: ReindexArgs) {
   if (!orchestrator.isInitialized()) {
     return {
       content: [
@@ -529,7 +574,7 @@ async function handleReindex(orchestrator: Orchestrator, args: any) {
   }
 }
 
-async function handleConfigureIndexer(orchestrator: Orchestrator, args: any) {
+async function handleConfigureIndexer(orchestrator: Orchestrator, args: ConfigureIndexerArgs) {
   if (!orchestrator.isInitialized()) {
     return {
       content: [
@@ -542,7 +587,7 @@ async function handleConfigureIndexer(orchestrator: Orchestrator, args: any) {
   }
 
   const currentConfig = orchestrator.getConfig();
-  const updates: any = {};
+  const updates: Partial<Config> = {};
 
   // Build update object
   if (args.provider) {
@@ -658,7 +703,7 @@ async function handleConfigureIndexer(orchestrator: Orchestrator, args: any) {
   }
 }
 
-async function handleClearIndex(orchestrator: Orchestrator, args: any) {
+async function handleClearIndex(orchestrator: Orchestrator, args: ClearIndexArgs) {
   if (!args.confirm) {
     return {
       content: [
@@ -741,7 +786,7 @@ async function handleClearIndex(orchestrator: Orchestrator, args: any) {
   }
 }
 
-async function handleValidateConfig(orchestrator: Orchestrator, args: any) {
+async function handleValidateConfig(orchestrator: Orchestrator, args: ValidateConfigArgs) {
   const component = args.component || 'all';
   const results: string[] = ['# Configuration Validation', ''];
 

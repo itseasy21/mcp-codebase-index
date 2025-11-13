@@ -59,6 +59,8 @@ export async function retry<T>(
     }
   }
 
+  // TypeScript doesn't recognize loop always exits via return/throw, so this is needed for type safety
+  // In practice, this line is never reached
   throw lastError || new Error('Retry failed without error');
 }
 

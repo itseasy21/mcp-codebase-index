@@ -1,39 +1,37 @@
-# Sample Markdown File
+# Sample Markdown Document
 
-This is a sample markdown file for testing the parser.
+This is a test markdown document for parser testing.
 
 ## Introduction
 
-The markdown parser should split this file into sections based on headers.
+This section introduces the concept.
 
-### Features
+### Subsection 1
 
-- Header-based chunking
-- Section extraction
-- Metadata preservation
+Some details about subsection 1.
 
-## Installation
+### Subsection 2
 
-To install the package:
+More information here.
 
-```bash
-npm install mcp-codebase-index
-```
+## Features
 
-## Usage
+Here are the main features:
 
-Here's how to use it:
+- Feature 1
+- Feature 2
+- Feature 3
+
+## Code Examples
+
+Here's a code example:
 
 ```typescript
-import { codeParser } from 'mcp-codebase-index';
-
-const result = await codeParser.parseFile('myfile.ts');
+function example() {
+  console.log('Hello World');
+}
 ```
-
-### Configuration
-
-You can configure the parser with various options.
 
 ## Conclusion
 
-This demonstrates the markdown parsing capability.
+This concludes the document.

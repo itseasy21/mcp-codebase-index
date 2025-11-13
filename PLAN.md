@@ -106,6 +106,7 @@ This document outlines the implementation plan for a Model Context Protocol (MCP
 - **Testing**: `vitest` or `jest`
 - **Linting**: `eslint` + `prettier`
 - **Type Checking**: TypeScript strict mode
+- **File Watching**: `chokidar` (more robust than native fs.watch)
 
 ---
 
@@ -123,6 +124,8 @@ mcp-codebase-index/
 │   │   ├── index.ts               # Parser orchestrator
 │   │   ├── tree-sitter.ts         # Tree-sitter integration
 │   │   ├── language-registry.ts   # Language grammar registry
+│   │   ├── markdown-parser.ts     # Markdown header-based parsing
+│   │   ├── fallback-chunker.ts    # Line-based chunking fallback
 │   │   ├── extractors/
 │   │   │   ├── base.ts            # Base extractor interface
 │   │   │   ├── typescript.ts      # TypeScript/JavaScript extractor
@@ -171,6 +174,9 @@ mcp-codebase-index/
 │   │   ├── logger.ts              # Logging utility
 │   │   ├── errors.ts              # Custom error classes
 │   │   ├── file-utils.ts          # File operations
+│   │   ├── file-filter.ts         # .gitignore + .mcpignore handling
+│   │   ├── file-hash.ts           # Content hashing for cache
+│   │   ├── git-utils.ts           # Git branch detection
 │   │   ├── retry.ts               # Retry logic
 │   │   └── cache.ts               # Caching utilities
 │   └── types/
@@ -309,6 +315,56 @@ mcp-codebase-index/
     concurrency?: number;
     excludePatterns?: string[];
   };
+  validate?: boolean;        // Test connection on config change
+}
+```
+
+#### 5. `clear_index`
+**Purpose**: Clear all indexed data and reset
+
+**Input Schema**:
+```typescript
+{
+  confirm: boolean;          // Safety confirmation
+  workspace?: string;        // Specific workspace or all
+}
+```
+
+**Output Schema**:
+```typescript
+{
+  success: boolean;
+  message: string;
+  collectionsDeleted: number;
+  cacheCleared: boolean;
+}
+```
+
+#### 6. `validate_config`
+**Purpose**: Test configuration without indexing
+
+**Input Schema**:
+```typescript
+{
+  component?: 'qdrant' | 'embedder' | 'all';
+}
+```
+
+**Output Schema**:
+```typescript
+{
+  valid: boolean;
+  qdrant?: {
+    connected: boolean;
+    version?: string;
+    latency?: number;
+  };
+  embedder?: {
+    available: boolean;
+    model?: string;
+    testEmbedding?: boolean;
+  };
+  errors?: string[];
 }
 ```
 
@@ -357,6 +413,13 @@ QDRANT_API_KEY=your_api_key_here  # optional for local
 INDEX_BATCH_SIZE=50
 INDEX_CONCURRENCY=5
 INDEX_EXCLUDE_PATTERNS=node_modules,.git,dist,build,*.test.ts
+INDEX_MAX_FILE_SIZE=1048576  # 1MB in bytes
+INDEX_RESPECT_GITIGNORE=true
+INDEX_USE_MCPIGNORE=true
+
+# Git Integration
+GIT_WATCH_BRANCHES=true      # Reindex on branch switch
+GIT_AUTO_DETECT_CHANGES=true
 
 # Logging
 LOG_LEVEL=info  # debug|info|warn|error
@@ -406,18 +469,34 @@ LOG_LEVEL=info  # debug|info|warn|error
       "**/*.py",
       "**/*.java",
       "**/*.go",
-      "**/*.rs"
+      "**/*.rs",
+      "**/*.md"
     ],
     "batchSize": 50,
     "concurrency": 5,
+    "maxFileSize": 1048576,
+    "respectGitignore": true,
+    "useMcpignore": true,
     "autoIndex": true,
-    "watchFiles": true
+    "watchFiles": true,
+    "watchBranches": true,
+    "fallbackChunking": true,
+    "markdownHeaderParsing": true,
+    "excludeBinaries": true,
+    "excludeImages": true
   },
   "search": {
     "defaultLimit": 10,
     "minScore": 0.7,
     "includeContext": true,
-    "contextLines": 5
+    "contextLines": 5,
+    "searchMode": "all-folders",
+    "perFolderCollections": true
+  },
+  "multiWorkspace": {
+    "enabled": true,
+    "independentIndexing": true,
+    "aggregateStatus": true
   }
 }
 ```
@@ -451,20 +530,31 @@ LOG_LEVEL=info  # debug|info|warn|error
 3. Create base extractor interface
 4. Implement TypeScript/JavaScript extractor
 5. Implement Python extractor
-6. Create AST traversal and semantic block extraction
-7. Add metadata extraction (function names, parameters, return types)
-8. Implement file scanning and language detection
+6. **NEW**: Implement Markdown parser (header-based chunking)
+7. **NEW**: Implement fallback line-based chunker for unsupported files
+8. Create AST traversal and semantic block extraction
+9. Add metadata extraction (function names, parameters, return types)
+10. Implement file scanning and language detection
+11. **NEW**: Add file size validation (max 1MB default)
+12. **NEW**: Add binary/image file detection and exclusion
+13. **NEW**: Implement .gitignore and .mcpignore filtering
 
 **Deliverables**:
 - ✅ Parse TypeScript/JavaScript files into semantic blocks
 - ✅ Parse Python files into semantic blocks
+- ✅ Parse Markdown files by headers
+- ✅ Fallback chunking for unsupported file types
 - ✅ Extract functions, classes, methods with metadata
 - ✅ Handle syntax errors gracefully
+- ✅ Respect .gitignore and .mcpignore
+- ✅ Skip large files (>1MB) with warning
 
 **Key Challenges**:
 - Tree-sitter grammar setup for multiple languages
 - Determining optimal block granularity (function vs. class vs. file)
 - Handling malformed or incomplete code
+- **NEW**: Detecting binary files reliably
+- **NEW**: Balancing fallback chunking quality vs. performance
 
 ### Phase 3: Embedding Generation (Week 2-3)
 **Goal**: Implement multiple embedding providers
@@ -524,17 +614,22 @@ LOG_LEVEL=info  # debug|info|warn|error
 **Tasks**:
 1. Implement indexing queue with priority
 2. Create batch processor with concurrency control
-3. Implement file system watcher for auto-indexing
+3. **NEW**: Integrate `chokidar` for robust file watching
 4. Add incremental indexing (delta updates)
-5. Implement deduplication logic
-6. Add indexing state persistence
-7. Create error recovery and retry mechanisms
-8. Implement progress tracking
-9. Add indexing statistics collection
+5. **NEW**: Implement git branch change detection
+6. **NEW**: Auto-reindex on branch switch (configurable)
+7. Implement deduplication logic
+8. Add indexing state persistence
+9. Create error recovery and retry mechanisms
+10. Implement progress tracking
+11. Add indexing statistics collection
+12. **NEW**: Implement per-folder/workspace collection management
 
 **Deliverables**:
 - ✅ Full codebase indexing
 - ✅ Incremental updates on file changes
+- ✅ Git branch-aware indexing
+- ✅ Per-workspace collection isolation
 - ✅ Progress tracking and status reporting
 - ✅ Error recovery and resumption
 
@@ -543,6 +638,8 @@ LOG_LEVEL=info  # debug|info|warn|error
 - Handling large codebases (100k+ files)
 - Managing indexing queue priority
 - Optimizing batch sizes for speed vs. memory
+- **NEW**: Detecting git branch switches reliably
+- **NEW**: Managing multiple workspace collections
 
 ### Phase 6: Search Implementation (Week 4-5)
 **Goal**: Implement semantic search functionality
@@ -551,23 +648,28 @@ LOG_LEVEL=info  # debug|info|warn|error
 1. Implement query embedding generation
 2. Create vector similarity search
 3. Add metadata filtering (file type, path, language)
-4. Implement result ranking and scoring
-5. Add context extraction (surrounding code)
-6. Implement hybrid search (vector + keyword)
-7. Add search result caching
-8. Optimize search performance
+4. **NEW**: Implement per-folder vs. all-folders search modes
+5. Implement result ranking and scoring
+6. Add context extraction (surrounding code)
+7. Implement hybrid search (vector + keyword)
+8. Add search result caching
+9. Optimize search performance
+10. **NEW**: Add configurable search thresholds per query
 
 **Deliverables**:
 - ✅ Semantic search with natural language queries
 - ✅ Filtered search (by language, path, etc.)
+- ✅ Per-workspace and cross-workspace search
 - ✅ Result ranking and scoring
 - ✅ Code context in results
+- ✅ Configurable similarity thresholds
 
 **Key Challenges**:
 - Balancing precision vs. recall
 - Determining optimal similarity threshold
 - Extracting meaningful context
 - Handling ambiguous queries
+- **NEW**: Merging and ranking results across multiple collections
 
 ### Phase 7: Status Management (Week 5)
 **Goal**: Implement comprehensive status tracking
@@ -596,14 +698,18 @@ LOG_LEVEL=info  # debug|info|warn|error
 2. Implement `indexing_status` tool
 3. Implement `reindex` tool
 4. Implement `configure_indexer` tool
-5. Add input validation for all tools
-6. Implement tool error handling
-7. Add tool usage examples
-8. Create tool documentation
+5. **NEW**: Implement `clear_index` tool
+6. **NEW**: Implement `validate_config` tool
+7. Add input validation for all tools
+8. Implement tool error handling
+9. Add tool usage examples
+10. Create tool documentation
+11. **NEW**: Add real-time validation for configure_indexer
 
 **Deliverables**:
-- ✅ All MCP tools functional and tested
+- ✅ All 6 MCP tools functional and tested
 - ✅ Input/output validation
+- ✅ Real-time config validation
 - ✅ Error messages and user feedback
 - ✅ Tool documentation
 
@@ -614,15 +720,24 @@ LOG_LEVEL=info  # debug|info|warn|error
 1. Write unit tests for all components
 2. Write integration tests for workflows
 3. Add end-to-end tests with real codebases
-4. Performance benchmarking
-5. Memory usage optimization
-6. Indexing speed optimization
-7. Search latency optimization
-8. Error handling improvements
-9. Code review and refactoring
+4. **NEW**: Test edge cases:
+   - Large files (>1MB)
+   - Binary/image files
+   - Unsupported file types (fallback chunking)
+   - Git branch switches
+   - Multi-workspace scenarios
+   - Markdown parsing
+   - Malformed code
+5. Performance benchmarking
+6. Memory usage optimization
+7. Indexing speed optimization
+8. Search latency optimization
+9. Error handling improvements
+10. Code review and refactoring
 
 **Deliverables**:
 - ✅ 80%+ code coverage
+- ✅ Edge case handling verified
 - ✅ Performance benchmarks
 - ✅ Optimization report
 - ✅ Clean, maintainable code
@@ -958,6 +1073,356 @@ function calculateFinalScore(result: SearchResult): number {
 
 ---
 
+## ⚠️ Limitations & Constraints
+
+### File Processing Limits
+1. **File Size**: Maximum 1MB per file (configurable)
+   - Files larger than this are skipped with a warning
+   - Rationale: Prevents memory issues and excessive API costs
+
+2. **Binary Files**: Automatically excluded
+   - Images: `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.ico`, `.svg`
+   - Archives: `.zip`, `.tar`, `.gz`, `.7z`, `.rar`
+   - Executables: `.exe`, `.dll`, `.so`, `.dylib`
+   - Media: `.mp3`, `.mp4`, `.avi`, `.mov`, `.pdf`
+
+3. **Language Support**: Best results with Tree-sitter supported languages
+   - Tier 1 (Full parsing): TypeScript, JavaScript, Python, Java, Go, Rust
+   - Tier 2 (Partial): C, C++, C#, Ruby, PHP
+   - Tier 3 (Fallback): All other text files (line-based chunking)
+
+### Performance Constraints
+1. **Initial Indexing Time**: Scales linearly with codebase size
+   - ~10-30 seconds per 1,000 files (depends on embedding provider)
+   - Large codebases (100k+ files) may take hours on first index
+
+2. **API Rate Limits**: Bound by embedding provider limits
+   - Gemini: Generous free tier (60 requests/minute)
+   - OpenAI: Depends on tier (3k-200k requests/minute)
+   - Ollama: No limits (local)
+
+3. **Memory Usage**: Proportional to batch size and concurrency
+   - Default: ~512MB during indexing
+   - Recommend: 2GB+ RAM for large codebases
+
+### Feature Limitations
+1. **No Full-Text Storage**: Only embeddings and metadata stored
+   - Original files must be accessible for context retrieval
+   - Cannot search if files are deleted/moved
+
+2. **No Version History**: Indexes current state only
+   - Historical code search requires git integration (future)
+
+3. **Single Repository Focus**: MVP supports one repo at a time
+   - Multi-repo support planned for Phase 11
+
+4. **Embedding Provider Lock-in**: Changing providers requires full reindex
+   - Different models have different dimensions
+   - Cannot mix embeddings in same collection
+
+### Security Limitations
+1. **Local Secrets Only**: API keys stored locally (not encrypted at rest)
+   - Use environment variables or secret management tools
+
+2. **No Access Control**: All indexed code searchable by MCP client
+   - Not suitable for mixed-permission codebases without additional controls
+
+---
+
+## 🔧 Troubleshooting Guide
+
+### Common Issues
+
+#### 🔴 Red Status: Connection Errors
+
+**Symptom**: Status icon shows 🔴 Red with "Error: Cannot connect to Qdrant"
+
+**Solutions**:
+1. Verify Qdrant is running:
+   ```bash
+   # For Docker
+   docker ps | grep qdrant
+
+   # Test connection
+   curl http://localhost:6333/health
+   ```
+
+2. Check Qdrant configuration:
+   - Verify `QDRANT_URL` is correct
+   - For cloud: Ensure `QDRANT_API_KEY` is valid
+   - Check firewall/network settings
+
+3. Restart Qdrant:
+   ```bash
+   docker restart qdrant
+   ```
+
+---
+
+**Symptom**: Status icon shows 🔴 Red with "Embedding provider error"
+
+**Solutions**:
+1. Verify API key:
+   - Gemini: Check at https://aistudio.google.com/app/apikey
+   - OpenAI: Check at https://platform.openai.com/api-keys
+   - Regenerate if invalid
+
+2. Check API quotas:
+   - Gemini: View at Google AI Studio
+   - OpenAI: Check usage at platform.openai.com
+
+3. Test connection:
+   ```bash
+   # Use validate_config tool
+   mcp-tool validate_config --component embedder
+   ```
+
+4. Switch providers temporarily:
+   ```bash
+   # Use Ollama as fallback (local, no API key)
+   EMBEDDING_PROVIDER=ollama
+   ```
+
+---
+
+#### 🟡 Yellow Status: Indexing Stuck
+
+**Symptom**: Status shows "Indexing - 45%" for extended period
+
+**Solutions**:
+1. Check logs for errors:
+   ```bash
+   # View recent logs
+   tail -f ~/.mcp-codebase-index/logs/indexing.log
+   ```
+
+2. Look for rate limiting:
+   - Slow progress with many retries = rate limited
+   - Reduce `INDEX_CONCURRENCY` to slow down requests
+
+3. Check for large files:
+   - Files near 1MB limit take longer
+   - Consider reducing `INDEX_MAX_FILE_SIZE`
+
+4. Restart indexing:
+   ```bash
+   # Use reindex tool
+   mcp-tool reindex --mode full --force
+   ```
+
+---
+
+#### ⚪ Gray Status: Not Configured
+
+**Symptom**: Status shows ⚪ Gray with "Standby"
+
+**Solutions**:
+1. Complete configuration:
+   - Set embedding provider and API key
+   - Set Qdrant URL and API key (if cloud)
+   - Run `validate_config` to verify
+
+2. Initialize index:
+   ```bash
+   mcp-tool reindex --mode full
+   ```
+
+---
+
+### Performance Issues
+
+#### Slow Initial Indexing
+
+**Solutions**:
+1. Increase concurrency (if API limits allow):
+   ```env
+   INDEX_CONCURRENCY=10
+   ```
+
+2. Reduce batch size (if memory constrained):
+   ```env
+   INDEX_BATCH_SIZE=25
+   ```
+
+3. Exclude unnecessary directories:
+   ```bash
+   # Add to .mcpignore
+   echo "vendor/**" >> .mcpignore
+   echo "third_party/**" >> .mcpignore
+   ```
+
+4. Use local embeddings (Ollama) for speed:
+   ```env
+   EMBEDDING_PROVIDER=ollama
+   OLLAMA_MODEL=nomic-embed-text
+   ```
+
+---
+
+#### Slow Search Queries
+
+**Solutions**:
+1. Reduce search scope:
+   ```typescript
+   // Search specific paths only
+   codebase_search({
+     query: "authentication",
+     paths: ["src/auth/**"]
+   })
+   ```
+
+2. Lower result limit:
+   ```typescript
+   codebase_search({
+     query: "authentication",
+     limit: 5  // Instead of 10
+   })
+   ```
+
+3. Increase similarity threshold:
+   ```typescript
+   codebase_search({
+     query: "authentication",
+     threshold: 0.8  // Instead of 0.7, fewer results
+   })
+   ```
+
+---
+
+### File Processing Issues
+
+#### Files Not Being Indexed
+
+**Solutions**:
+1. Check `.gitignore` and `.mcpignore`:
+   ```bash
+   # Files may be excluded
+   cat .gitignore .mcpignore
+   ```
+
+2. Verify file size:
+   ```bash
+   # Find large files
+   find . -type f -size +1M
+   ```
+
+3. Check file type:
+   ```bash
+   # Ensure it's a text file
+   file path/to/file.txt
+   ```
+
+4. Review indexing logs for skip messages
+
+---
+
+#### Incorrect Code Blocks Extracted
+
+**Solutions**:
+1. Verify Tree-sitter grammar installed:
+   ```bash
+   # Check node_modules for tree-sitter-{language}
+   ls node_modules | grep tree-sitter
+   ```
+
+2. Report parsing issues:
+   - Some code patterns may confuse Tree-sitter
+   - Fallback chunking will be used automatically
+
+3. Adjust chunk size for fallback:
+   ```json
+   {
+     "embedding": {
+       "chunkSize": 256  // Smaller chunks
+     }
+   }
+   ```
+
+---
+
+### Git Integration Issues
+
+#### Index Not Updating on Branch Switch
+
+**Solutions**:
+1. Enable git branch watching:
+   ```env
+   GIT_WATCH_BRANCHES=true
+   ```
+
+2. Manual reindex after switch:
+   ```bash
+   mcp-tool reindex --mode incremental
+   ```
+
+3. Check git status:
+   ```bash
+   git status
+   # Ensure you're on the intended branch
+   ```
+
+---
+
+### Data Management
+
+#### Clear and Reset Index
+
+**When to use**:
+- Corrupted index
+- Want to change embedding provider
+- Major codebase restructure
+
+**How to**:
+```bash
+# Use clear_index tool
+mcp-tool clear_index --confirm true
+
+# Or manually delete Qdrant collection
+curl -X DELETE http://localhost:6333/collections/codebase-index
+```
+
+---
+
+### Multi-Workspace Issues
+
+#### Workspaces Not Indexed Separately
+
+**Solutions**:
+1. Enable per-folder collections:
+   ```json
+   {
+     "search": {
+       "perFolderCollections": true
+     }
+   }
+   ```
+
+2. Check collection names:
+   ```bash
+   # List Qdrant collections
+   curl http://localhost:6333/collections
+   ```
+
+3. Ensure `multiWorkspace.enabled: true` in config
+
+---
+
+### Getting Help
+
+If issues persist:
+1. **Check Logs**: `~/.mcp-codebase-index/logs/`
+2. **GitHub Issues**: Report at [github.com/your-org/mcp-codebase-index/issues]
+3. **Verbose Logging**:
+   ```env
+   LOG_LEVEL=debug
+   ```
+4. **Run Validation**:
+   ```bash
+   mcp-tool validate_config --component all
+   ```
+
+---
+
 ## 🔮 Future Enhancements (Post-MVP)
 
 ### Phase 11: Advanced Features
@@ -970,9 +1435,33 @@ function calculateFinalScore(result: SearchResult): number {
 
 ### Phase 12: UI/UX Improvements
 1. **Web Dashboard**: Visual interface for status and search
-2. **VSCode Extension**: Direct integration in editor
+   - Real-time status visualization
+   - Interactive search interface
+   - Configuration management UI
+   - Indexing progress charts
+
+2. **VS Code Extension**: Direct integration in editor
+   - Status bar icon with color-coded states (🟢🟡🔴⚪)
+   - Click popover for configuration
+   - Command palette integration
+   - Inline search results with code navigation
+   - Webview panels for advanced settings
+   - Secret storage for API keys
+   - Multi-folder workspace support
+   - Based on comparison plan architecture
+
 3. **CLI Tool**: Standalone search from terminal
-4. **Slack/Discord Bot**: Team search integration
+   - `mcp-search "query"` command
+   - Interactive REPL mode
+   - Output in multiple formats (JSON, table, markdown)
+
+4. **IDE Plugins**: JetBrains, Sublime, Vim/Neovim
+   - Consistent UX across editors
+   - Native integration patterns
+
+5. **Slack/Discord Bot**: Team search integration
+   - Slash commands for code search
+   - Shared knowledge base
 
 ### Phase 13: Enterprise Features
 1. **Team Collaboration**: Shared indexes, annotations

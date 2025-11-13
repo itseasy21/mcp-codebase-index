@@ -8,7 +8,7 @@ import { SemanticSearch } from './semantic-search.js';
 import { ResultRanker, type RankingOptions } from './result-ranker.js';
 import { ContextExtractor, type ContextOptions } from './context-extractor.js';
 import { LRUCache, hashKey } from '../utils/cache.js';
-import type { SearchQuery, SearchResponse, SearchStats, EnhancedSearchResult } from './types.js';
+import type { SearchQuery, SearchResponse } from './types.js';
 import { logger } from '../utils/logger.js';
 
 export interface SearchConfig {
@@ -31,7 +31,7 @@ export class Search {
   private contextExtractor: ContextExtractor;
   private cache: LRUCache<SearchResponse> | null = null;
 
-  constructor(private config: SearchConfig) {
+  constructor(config: SearchConfig) {
     this.semanticSearch = new SemanticSearch(
       config.embedder,
       config.storage,

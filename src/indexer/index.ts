@@ -7,16 +7,14 @@ import { join, relative } from 'path';
 import type { CodeParser } from '../parser/index.js';
 import type { EmbeddingProvider } from '../embeddings/base.js';
 import type { Storage } from '../storage/index.js';
-import { FileWatcher, type FileWatcherOptions } from './file-watcher.js';
+import { FileWatcher } from './file-watcher.js';
 import { IndexingQueue } from './indexing-queue.js';
-import { BatchProcessor, type BatchProcessorOptions } from './batch-processor.js';
+import { BatchProcessor } from './batch-processor.js';
 import { GitBranchWatcher, isGitRepository } from '../utils/git-utils.js';
 import { FileHashCache } from '../utils/file-hash.js';
 import type {
   IndexingOptions,
   IndexerState,
-  IndexingProgress,
-  IndexingStats,
   FileChangeEvent,
 } from './types.js';
 import { logger } from '../utils/logger.js';

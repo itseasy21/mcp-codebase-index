@@ -2,7 +2,7 @@
  * Types for status management
  */
 
-import type { IndexingStatus, StatusInfo } from '../types/models.js';
+import type { IndexingStatus } from '../types/models.js';
 
 /**
  * Status icon mapping

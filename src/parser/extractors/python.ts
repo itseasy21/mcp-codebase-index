@@ -22,8 +22,8 @@ export class PythonExtractor extends BaseExtractor {
 
   protected extractNode(
     node: Parser.SyntaxNode,
-    filePath: string,
-    content: string
+    _filePath: string,
+    _content: string
   ): ExtractionResult | null {
     switch (node.type) {
       case 'function_definition':

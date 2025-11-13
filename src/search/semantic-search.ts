@@ -5,7 +5,6 @@
 import type { EmbeddingProvider } from '../embeddings/base.js';
 import type { Storage } from '../storage/index.js';
 import type { SearchQuery, EnhancedSearchResult } from './types.js';
-import type { SearchResult } from '../types/models.js';
 import { logger } from '../utils/logger.js';
 import { SearchError } from '../utils/errors.js';
 

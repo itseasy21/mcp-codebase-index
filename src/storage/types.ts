@@ -2,8 +2,6 @@
  * Types for vector storage
  */
 
-import type { Vector, VectorMetadata, SearchResult } from '../types/models.js';
-
 /**
  * Qdrant collection configuration
  */

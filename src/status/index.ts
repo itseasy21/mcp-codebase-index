@@ -10,7 +10,6 @@ import type {
   ErrorInfo,
   StatsInfo,
   StatusDisplay,
-  STATUS_ICONS,
 } from './types.js';
 import type { IndexingStatus } from '../types/models.js';
 import { logger } from '../utils/logger.js';

@@ -5,7 +5,6 @@
 import type Parser from 'tree-sitter';
 import { BaseExtractor } from './base.js';
 import type { ExtractionResult } from '../types.js';
-import type { CodeBlockType } from '../../types/models.js';
 
 /**
  * Extractor for TypeScript and JavaScript code
@@ -30,8 +29,8 @@ export class TypeScriptExtractor extends BaseExtractor {
 
   protected extractNode(
     node: Parser.SyntaxNode,
-    filePath: string,
-    content: string
+    _filePath: string,
+    _content: string
   ): ExtractionResult | null {
     switch (node.type) {
       case 'function_declaration':

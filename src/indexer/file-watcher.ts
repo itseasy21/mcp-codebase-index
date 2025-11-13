@@ -68,7 +68,7 @@ export class FileWatcher {
         .on('add', (path) => this.handleFileChange('add', path))
         .on('change', (path) => this.handleFileChange('change', path))
         .on('unlink', (path) => this.handleFileChange('unlink', path))
-        .on('error', (error) => this.handleError(error))
+        .on('error', (error) => this.handleError(error instanceof Error ? error : new Error(String(error))))
         .on('ready', () => {
           logger.info('File watcher is ready');
           this.isWatching = true;

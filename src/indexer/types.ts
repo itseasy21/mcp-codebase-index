@@ -2,7 +2,7 @@
  * Types for indexing operations
  */
 
-import type { CodeBlock, IndexingStatus } from '../types/models.js';
+import type { IndexingStatus } from '../types/models.js';
 
 /**
  * Indexing task

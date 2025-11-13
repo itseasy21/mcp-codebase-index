@@ -54,7 +54,7 @@ export class OllamaEmbeddingProvider extends BaseEmbeddingProvider {
         throw new Error(`Ollama API error: ${response.status} - ${errorText}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as { embedding?: number[] };
 
       if (!data.embedding || !Array.isArray(data.embedding)) {
         throw new EmbeddingError('Invalid embedding response from Ollama', 'ollama');
@@ -114,11 +114,11 @@ export class OllamaEmbeddingProvider extends BaseEmbeddingProvider {
         };
       }
 
-      const data = await response.json();
+      const data = await response.json() as { models?: Array<{ name: string }> };
 
       // Check if the model is available
       const model = this.defaultModel;
-      const modelAvailable = data.models?.some((m: any) => m.name.includes(model));
+      const modelAvailable = data.models?.some((m) => m.name.includes(model));
 
       if (!modelAvailable) {
         return {

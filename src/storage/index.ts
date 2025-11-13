@@ -7,13 +7,9 @@ import { CollectionManager } from './collection-manager.js';
 import { VectorStore } from './vector-store.js';
 import type {
   CollectionConfig,
-  CollectionInfo,
   Point,
   SearchOptions,
-  QdrantSearchResult,
   StorageHealth,
-  BatchUpsertResult,
-  DeleteResult,
 } from './types.js';
 import { logger } from '../utils/logger.js';
 import { StorageError } from '../utils/errors.js';

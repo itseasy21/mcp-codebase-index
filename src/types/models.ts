@@ -51,6 +51,7 @@ export interface CodeBlockMetadata {
   decorators?: string[];
   comments?: string;
   complexity?: number;
+  level?: number; // For markdown headers
 }
 
 /**

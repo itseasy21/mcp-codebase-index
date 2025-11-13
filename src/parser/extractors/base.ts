@@ -78,7 +78,7 @@ export abstract class BaseExtractor implements CodeExtractor {
   protected createCodeBlock(
     result: ExtractionResult,
     filePath: string,
-    content: string
+    _content: string
   ): CodeBlock {
     const id = this.generateId(filePath, result.startLine);
 

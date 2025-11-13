@@ -2,7 +2,6 @@
  * Language registry for Tree-sitter grammars
  */
 
-import Parser from 'tree-sitter';
 import type { LanguageInfo } from './types.js';
 import { logger } from '../utils/logger.js';
 
@@ -11,7 +10,7 @@ import { logger } from '../utils/logger.js';
  */
 export class LanguageRegistry {
   private languages: Map<string, LanguageInfo> = new Map();
-  private parsers: Map<string, Parser.Language> = new Map();
+  private parsers: Map<string, any> = new Map();
 
   constructor() {
     this.registerLanguages();
@@ -158,7 +157,7 @@ export class LanguageRegistry {
   /**
    * Get Tree-sitter parser for language
    */
-  async getParser(language: string): Promise<Parser.Language | null> {
+  async getParser(language: string): Promise<any | null> {
     const lang = this.getLanguage(language);
 
     if (!lang || !lang.hasGrammar) {
@@ -184,7 +183,7 @@ export class LanguageRegistry {
   /**
    * Load Tree-sitter grammar dynamically
    */
-  private async loadGrammar(grammarName: string): Promise<Parser.Language> {
+  private async loadGrammar(grammarName: string): Promise<any> {
     try {
       // Dynamically import the grammar
       // Note: The actual grammar package names follow the pattern tree-sitter-{language}

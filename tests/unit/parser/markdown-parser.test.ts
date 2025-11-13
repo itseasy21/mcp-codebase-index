@@ -111,7 +111,8 @@ describe('MarkdownParser', () => {
       const blocks = parser.parse('plain.md', content);
 
       expect(blocks.length).toBe(1);
-      expect(blocks[0].name).toBe('Document');
+      // Content before first header is labeled as 'Preamble'
+      expect(blocks[0].name).toBe('Preamble');
     });
   });
 

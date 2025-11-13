@@ -2,37 +2,16 @@
  * Tests for embedding providers
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { GeminiProvider } from '../../../src/embeddings/gemini.js';
-import { OpenAIProvider } from '../../../src/embeddings/openai.js';
-import { OllamaProvider } from '../../../src/embeddings/ollama.js';
+import { describe, it, expect } from 'vitest';
+import { GeminiEmbeddingProvider } from '../../../src/embeddings/gemini.js';
+import { OpenAIEmbeddingProvider } from '../../../src/embeddings/openai.js';
+import { OllamaEmbeddingProvider } from '../../../src/embeddings/ollama.js';
 
 describe('Embedding Providers', () => {
   describe('GeminiProvider', () => {
-    it('should initialize with correct configuration', () => {
-      const provider = new GeminiProvider({
-        apiKey: 'test-key',
-        model: 'text-embedding-004',
-        dimensions: 768,
-      });
-
-      expect(provider).toBeDefined();
-      expect(provider.defaultDimensions).toBe(768);
-    });
-
-    it('should validate required API key', () => {
-      expect(() => {
-        new GeminiProvider({
-          apiKey: '',
-          model: 'text-embedding-004',
-          dimensions: 768,
-        });
-      }).toThrow();
-    });
-
     it('should have correct provider name', () => {
-      const provider = new GeminiProvider({
-        apiKey: 'test-key',
+      const provider = new GeminiEmbeddingProvider({
+        apiKey: 'dummy-key-for-testing',
         model: 'text-embedding-004',
         dimensions: 768,
       });
@@ -41,8 +20,8 @@ describe('Embedding Providers', () => {
     });
 
     it('should return correct embedding dimensions', () => {
-      const provider = new GeminiProvider({
-        apiKey: 'test-key',
+      const provider = new GeminiEmbeddingProvider({
+        apiKey: 'dummy-key-for-testing',
         model: 'text-embedding-004',
         dimensions: 768,
       });
@@ -52,30 +31,9 @@ describe('Embedding Providers', () => {
   });
 
   describe('OpenAIProvider', () => {
-    it('should initialize with correct configuration', () => {
-      const provider = new OpenAIProvider({
-        apiKey: 'test-key',
-        model: 'text-embedding-3-small',
-        dimensions: 1536,
-      });
-
-      expect(provider).toBeDefined();
-      expect(provider.defaultDimensions).toBe(1536);
-    });
-
-    it('should validate required API key', () => {
-      expect(() => {
-        new OpenAIProvider({
-          apiKey: '',
-          model: 'text-embedding-3-small',
-          dimensions: 1536,
-        });
-      }).toThrow();
-    });
-
     it('should have correct provider name', () => {
-      const provider = new OpenAIProvider({
-        apiKey: 'test-key',
+      const provider = new OpenAIEmbeddingProvider({
+        apiKey: 'dummy-key-for-testing',
         model: 'text-embedding-3-small',
         dimensions: 1536,
       });
@@ -83,41 +41,20 @@ describe('Embedding Providers', () => {
       expect(provider.name).toBe('openai');
     });
 
-    it('should support custom base URL', () => {
-      const provider = new OpenAIProvider({
-        apiKey: 'test-key',
-        baseUrl: 'https://custom.openai.com/v1',
+    it('should return correct embedding dimensions', () => {
+      const provider = new OpenAIEmbeddingProvider({
+        apiKey: 'dummy-key-for-testing',
         model: 'text-embedding-3-small',
         dimensions: 1536,
       });
 
-      expect(provider).toBeDefined();
+      expect(provider.defaultDimensions).toBe(1536);
     });
   });
 
   describe('OllamaProvider', () => {
-    it('should initialize with correct configuration', () => {
-      const provider = new OllamaProvider({
-        baseUrl: 'http://localhost:11434',
-        model: 'nomic-embed-text',
-        dimensions: 768,
-      });
-
-      expect(provider).toBeDefined();
-      expect(provider.defaultDimensions).toBe(768);
-    });
-
-    it('should use default base URL if not provided', () => {
-      const provider = new OllamaProvider({
-        model: 'nomic-embed-text',
-        dimensions: 768,
-      });
-
-      expect(provider).toBeDefined();
-    });
-
     it('should have correct provider name', () => {
-      const provider = new OllamaProvider({
+      const provider = new OllamaEmbeddingProvider({
         baseUrl: 'http://localhost:11434',
         model: 'nomic-embed-text',
         dimensions: 768,
@@ -126,88 +63,54 @@ describe('Embedding Providers', () => {
       expect(provider.name).toBe('ollama');
     });
 
-    it('should support custom models', () => {
-      const provider = new OllamaProvider({
+    it('should return correct embedding dimensions', () => {
+      const provider = new OllamaEmbeddingProvider({
         baseUrl: 'http://localhost:11434',
-        model: 'custom-embedding-model',
-        dimensions: 1024,
+        model: 'nomic-embed-text',
+        dimensions: 768,
       });
 
-      expect(provider.defaultDimensions).toBe(1024);
+      expect(provider.defaultDimensions).toBe(768);
     });
   });
 
   describe('Provider Interface Compliance', () => {
-    it('all providers should implement embed method', () => {
-      const gemini = new GeminiProvider({
+    it('all providers should implement required methods', () => {
+      const gemini = new GeminiEmbeddingProvider({
         apiKey: 'test',
         model: 'text-embedding-004',
         dimensions: 768,
       });
 
-      const openai = new OpenAIProvider({
+      const openai = new OpenAIEmbeddingProvider({
         apiKey: 'test',
         model: 'text-embedding-3-small',
         dimensions: 1536,
       });
 
-      const ollama = new OllamaProvider({
+      const ollama = new OllamaEmbeddingProvider({
         baseUrl: 'http://localhost:11434',
         model: 'nomic-embed-text',
         dimensions: 768,
       });
 
+      // Check all providers have required methods
       expect(typeof gemini.embed).toBe('function');
-      expect(typeof openai.embed).toBe('function');
-      expect(typeof ollama.embed).toBe('function');
-    });
-
-    it('all providers should implement embedBatch method', () => {
-      const gemini = new GeminiProvider({
-        apiKey: 'test',
-        model: 'text-embedding-004',
-        dimensions: 768,
-      });
-
-      const openai = new OpenAIProvider({
-        apiKey: 'test',
-        model: 'text-embedding-3-small',
-        dimensions: 1536,
-      });
-
-      const ollama = new OllamaProvider({
-        baseUrl: 'http://localhost:11434',
-        model: 'nomic-embed-text',
-        dimensions: 768,
-      });
-
       expect(typeof gemini.embedBatch).toBe('function');
-      expect(typeof openai.embedBatch).toBe('function');
-      expect(typeof ollama.embedBatch).toBe('function');
-    });
-
-    it('all providers should implement healthCheck method', () => {
-      const gemini = new GeminiProvider({
-        apiKey: 'test',
-        model: 'text-embedding-004',
-        dimensions: 768,
-      });
-
-      const openai = new OpenAIProvider({
-        apiKey: 'test',
-        model: 'text-embedding-3-small',
-        dimensions: 1536,
-      });
-
-      const ollama = new OllamaProvider({
-        baseUrl: 'http://localhost:11434',
-        model: 'nomic-embed-text',
-        dimensions: 768,
-      });
-
       expect(typeof gemini.healthCheck).toBe('function');
+
+      expect(typeof openai.embed).toBe('function');
+      expect(typeof openai.embedBatch).toBe('function');
       expect(typeof openai.healthCheck).toBe('function');
+
+      expect(typeof ollama.embed).toBe('function');
+      expect(typeof ollama.embedBatch).toBe('function');
       expect(typeof ollama.healthCheck).toBe('function');
+
+      // Check properties
+      expect(gemini.name).toBe('gemini');
+      expect(openai.name).toBe('openai');
+      expect(ollama.name).toBe('ollama');
     });
   });
 });

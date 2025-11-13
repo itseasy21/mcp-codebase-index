@@ -129,8 +129,8 @@ export function createStorage(config: QdrantConfig): Storage {
 }
 
 // Re-export types
+export type { QdrantConfig } from './qdrant-client.js';
 export type {
-  QdrantConfig,
   CollectionConfig,
   CollectionInfo,
   Point,

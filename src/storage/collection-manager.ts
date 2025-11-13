@@ -28,8 +28,8 @@ export class CollectionManager {
           await qdrantClient.createCollection(config.name, {
             vectors: {
               size: config.vectorSize,
-              distance: config.distance,
-            },
+              distance: config.distance as any,
+            } as any,
             optimizers_config: config.optimizerConfig,
             on_disk_payload: config.onDiskPayload,
           });
@@ -82,9 +82,17 @@ export class CollectionManager {
     try {
       const info = await this.client.getCollectionInfo(collectionName);
 
+      // Handle vectors config - it might be an object or number
+      const vectorsConfig = info.config?.params?.vectors;
+      const vectorSize = typeof vectorsConfig === 'object' && vectorsConfig && 'size' in vectorsConfig
+        ? (vectorsConfig as any).size
+        : typeof vectorsConfig === 'number'
+        ? vectorsConfig
+        : 768; // fallback
+
       return {
         name: collectionName,
-        vectorSize: info.config.params.vectors.size,
+        vectorSize,
         pointsCount: info.points_count || 0,
         indexedVectorsCount: info.indexed_vectors_count || 0,
         status: info.status as 'green' | 'yellow' | 'red',
@@ -184,10 +192,22 @@ export class CollectionManager {
     try {
       const info = await this.client.getCollectionInfo(collectionName);
 
+      // Handle vectors config - it might be an object or number
+      const vectorsConfig = info.config?.params?.vectors;
+      const vectorSize = typeof vectorsConfig === 'object' && vectorsConfig && 'size' in vectorsConfig
+        ? (vectorsConfig as any).size
+        : typeof vectorsConfig === 'number'
+        ? vectorsConfig
+        : 768; // fallback
+
+      const distance = typeof vectorsConfig === 'object' && vectorsConfig && 'distance' in vectorsConfig
+        ? String((vectorsConfig as any).distance)
+        : 'Cosine';
+
       return {
         version: 1, // For now, we use a simple version number
-        vectorSize: info.config.params.vectors.size,
-        distance: info.config.params.vectors.distance,
+        vectorSize,
+        distance,
         created: new Date(), // Qdrant doesn't track this, we'd need to store it ourselves
         migrationRequired: false,
       };

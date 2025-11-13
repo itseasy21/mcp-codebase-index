@@ -359,7 +359,9 @@ export class VectorStore {
 
       return {
         points,
-        nextOffset: result.next_page_offset,
+        nextOffset: (typeof result.next_page_offset === 'string' || typeof result.next_page_offset === 'number')
+          ? result.next_page_offset
+          : undefined,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

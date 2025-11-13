@@ -87,10 +87,11 @@ export class Orchestrator {
 
       if (!collectionExists) {
         logger.info(`Creating collection: ${this.config.qdrant.collectionName}`);
-        await this.storage.collections.create(
-          this.config.qdrant.collectionName,
-          this.config.embedding.dimensions
-        );
+        await this.storage.collections.create({
+          name: this.config.qdrant.collectionName,
+          vectorSize: this.config.embedding.dimensions,
+          distance: this.config.qdrant.distanceMetric,
+        });
       } else {
         logger.info(`Using existing collection: ${this.config.qdrant.collectionName}`);
       }
@@ -158,16 +159,18 @@ export class Orchestrator {
       logger.info('Initial indexing complete');
 
       // Start file watcher if enabled
-      if (this.config.indexing.enableWatcher) {
-        await this.indexer.startWatching();
-        logger.info('File watcher started');
-      }
+      // TODO: Implement startWatching() method in Indexer
+      // if (this.config.indexing.enableWatcher) {
+      //   await this.indexer.startWatching();
+      //   logger.info('File watcher started');
+      // }
 
       // Start git branch monitor if enabled
-      if (this.config.indexing.gitIntegration && this.config.indexing.detectBranchChange) {
-        await this.indexer.startGitMonitor();
-        logger.info('Git branch monitor started');
-      }
+      // TODO: Implement startGitMonitor() method in Indexer
+      // if (this.config.indexing.gitIntegration && this.config.indexing.detectBranchChange) {
+      //   await this.indexer.startGitMonitor();
+      //   logger.info('Git branch monitor started');
+      // }
     } catch (error) {
       logger.error('Auto-indexing setup failed:', error);
       throw error;

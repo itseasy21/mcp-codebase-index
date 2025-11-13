@@ -80,6 +80,10 @@ export const configSchema = z.object({
     markdownHeaderParsing: z.boolean().default(true),
     excludeBinaries: z.boolean().default(true),
     excludeImages: z.boolean().default(true),
+    enableWatcher: z.boolean().default(true),
+    gitIntegration: z.boolean().default(true),
+    detectBranchChange: z.boolean().default(true),
+    watchDebounce: z.number().int().min(0).default(200),
   }),
 
   // Search configuration
@@ -90,6 +94,9 @@ export const configSchema = z.object({
     contextLines: z.number().int().min(0).default(5),
     searchMode: z.enum(['all-folders', 'per-folder']).default('all-folders'),
     perFolderCollections: z.boolean().default(true),
+    enableCache: z.boolean().default(true),
+    cacheSize: z.number().int().positive().default(100),
+    cacheTTL: z.number().int().positive().default(300000), // 5 minutes
   }),
 
   // Multi-workspace configuration

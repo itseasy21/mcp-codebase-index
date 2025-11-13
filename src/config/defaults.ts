@@ -66,6 +66,10 @@ export const defaultConfig: Partial<Config> = {
     markdownHeaderParsing: true,
     excludeBinaries: true,
     excludeImages: true,
+    enableWatcher: true,
+    gitIntegration: true,
+    detectBranchChange: true,
+    watchDebounce: 200,
   },
   search: {
     defaultLimit: 10,
@@ -74,6 +78,9 @@ export const defaultConfig: Partial<Config> = {
     contextLines: 5,
     searchMode: 'all-folders',
     perFolderCollections: true,
+    enableCache: true,
+    cacheSize: 100,
+    cacheTTL: 300000,
   },
   multiWorkspace: {
     enabled: true,

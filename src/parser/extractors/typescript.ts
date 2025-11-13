@@ -11,7 +11,7 @@ import type { CodeBlockType } from '../../types/models.js';
  * Extractor for TypeScript and JavaScript code
  */
 export class TypeScriptExtractor extends BaseExtractor {
-  readonly language = 'typescript';
+  readonly language: string = 'typescript';
 
   getTargetNodeTypes(): string[] {
     return [
@@ -317,5 +317,5 @@ export class TypeScriptExtractor extends BaseExtractor {
  * JavaScript extractor (uses same logic as TypeScript)
  */
 export class JavaScriptExtractor extends TypeScriptExtractor {
-  readonly language = 'javascript';
+  readonly language: string = 'javascript';
 }

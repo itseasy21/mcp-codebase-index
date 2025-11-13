@@ -260,7 +260,7 @@ export class Indexer {
         if (this.fileHashCache.hasChanged(fullPath, content)) {
           changed.push(file);
         }
-      } catch (error) {
+      } catch (_error) {
         // If we can't read the file, include it anyway
         changed.push(file);
       }

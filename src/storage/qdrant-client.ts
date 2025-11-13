@@ -79,7 +79,7 @@ export class QdrantClientWrapper {
         try {
           const info = await this.client.getCollection(collection.name);
           totalPoints += info.points_count || 0;
-        } catch (error) {
+        } catch (_error) {
           logger.warn(`Failed to get collection info for ${collection.name}`);
         }
       }
@@ -110,7 +110,7 @@ export class QdrantClientWrapper {
     try {
       await this.client.getCollection(collectionName);
       return true;
-    } catch (error) {
+    } catch (_error) {
       return false;
     }
   }

@@ -43,7 +43,7 @@ export class ContextExtractor {
           ...result,
           context,
         });
-      } catch (error) {
+      } catch (_error) {
         logger.warn(`Failed to extract context for ${result.file}:${result.line}`);
         resultsWithContext.push(result);
       }

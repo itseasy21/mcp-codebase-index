@@ -85,7 +85,7 @@ export async function getFileSize(filePath: string): Promise<number> {
   try {
     const stats = await fs.stat(filePath);
     return stats.size;
-  } catch (error) {
+  } catch (_error) {
     throw new FileSystemError(`Failed to get file size: ${filePath}`, filePath);
   }
 }
@@ -107,7 +107,7 @@ export async function isFileTooLarge(
 export async function readFileContent(filePath: string): Promise<string> {
   try {
     return await fs.readFile(filePath, 'utf-8');
-  } catch (error) {
+  } catch (_error) {
     throw new FileSystemError(`Failed to read file: ${filePath}`, filePath);
   }
 }
@@ -118,7 +118,7 @@ export async function readFileContent(filePath: string): Promise<string> {
 export async function readFileBuffer(filePath: string): Promise<Buffer> {
   try {
     return await fs.readFile(filePath);
-  } catch (error) {
+  } catch (_error) {
     throw new FileSystemError(`Failed to read file: ${filePath}`, filePath);
   }
 }

@@ -32,12 +32,12 @@ export interface EmbeddingProvider {
   /**
    * Generate embedding for a single text
    */
-  embed(text: string, options?: EmbeddingOptions): Promise<Embedding>;
+  embed(_text: string, _options?: EmbeddingOptions): Promise<Embedding>;
 
   /**
    * Generate embeddings for multiple texts
    */
-  embedBatch(texts: string[], options?: EmbeddingOptions): Promise<BatchEmbeddingResult>;
+  embedBatch(_texts: string[], _options?: EmbeddingOptions): Promise<BatchEmbeddingResult>;
 
   /**
    * Check provider health and availability
@@ -52,7 +52,7 @@ export interface EmbeddingProvider {
   /**
    * Update provider configuration
    */
-  updateConfig(config: Partial<ProviderConfig>): void;
+  updateConfig(_config: Partial<ProviderConfig>): void;
 }
 
 /**
@@ -69,9 +69,9 @@ export abstract class BaseEmbeddingProvider implements EmbeddingProvider {
     this.config = { ...config };
   }
 
-  abstract embed(text: string, options?: EmbeddingOptions): Promise<Embedding>;
+  abstract embed(_text: string, _options?: EmbeddingOptions): Promise<Embedding>;
 
-  abstract embedBatch(texts: string[], options?: EmbeddingOptions): Promise<BatchEmbeddingResult>;
+  abstract embedBatch(_texts: string[], _options?: EmbeddingOptions): Promise<BatchEmbeddingResult>;
 
   abstract healthCheck(): Promise<ProviderHealth>;
 
@@ -79,8 +79,8 @@ export abstract class BaseEmbeddingProvider implements EmbeddingProvider {
     return { ...this.config };
   }
 
-  updateConfig(config: Partial<ProviderConfig>): void {
-    this.config = { ...this.config, ...config };
+  updateConfig(_config: Partial<ProviderConfig>): void {
+    this.config = { ...this.config, ..._config };
   }
 
   /**

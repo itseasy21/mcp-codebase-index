@@ -148,7 +148,7 @@ export class CollectionManager {
         try {
           const info = await this.getCollectionInfo(collection.name);
           collections.push(info);
-        } catch (error) {
+        } catch (_error) {
           logger.warn(`Failed to get info for collection ${collection.name}`);
         }
       }

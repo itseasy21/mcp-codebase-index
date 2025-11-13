@@ -1,0 +1,71 @@
+{
+  "name": "mcp-codebase-index",
+  "version": "0.1.0",
+  "description": "MCP server for semantic code search using Tree-sitter, embeddings, and Qdrant vector database",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mcp-codebase-index": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "semantic-search",
+    "code-search",
+    "tree-sitter",
+    "embeddings",
+    "qdrant",
+    "vector-database",
+    "claude",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@qdrant/js-client-rest": "^1.12.0",
+    "chokidar": "^4.0.1",
+    "dotenv": "^16.4.7",
+    "openai": "^4.77.0",
+    "tree-sitter": "^0.21.1",
+    "tree-sitter-c": "^0.21.4",
+    "tree-sitter-c-sharp": "^0.21.3",
+    "tree-sitter-cpp": "^0.23.2",
+    "tree-sitter-go": "^0.21.2",
+    "tree-sitter-java": "^0.21.0",
+    "tree-sitter-javascript": "^0.23.0",
+    "tree-sitter-php": "^0.23.9",
+    "tree-sitter-python": "^0.23.6",
+    "tree-sitter-ruby": "^0.21.0",
+    "tree-sitter-rust": "^0.23.2",
+    "tree-sitter-typescript": "^0.23.0",
+    "web-tree-sitter": "^0.23.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@typescript-eslint/eslint-plugin": "^8.16.0",
+    "@typescript-eslint/parser": "^8.16.0",
+    "eslint": "^9.15.0",
+    "prettier": "^3.3.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

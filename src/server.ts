@@ -11,6 +11,10 @@ import {
 import { logger } from './utils/logger.js';
 import { formatError } from './utils/errors.js';
 import type { Config } from './config/schema.js';
+import { Orchestrator } from './orchestrator.js';
+import { createEmbeddingProvider } from './embeddings/index.js';
+import type { ProviderConfig } from './embeddings/types.js';
+import { Storage } from './storage/index.js';
 
 /**
  * Create and configure the MCP server
@@ -28,8 +32,16 @@ export function createServer(config: Config): Server {
     }
   );
 
+  // Create orchestrator
+  const orchestrator = new Orchestrator(config);
+
+  // Initialize orchestrator in background
+  orchestrator.initialize().catch((error) => {
+    logger.error('Failed to initialize orchestrator:', formatError(error));
+  });
+
   // Register tool handlers
-  registerToolHandlers(server, config);
+  registerToolHandlers(server, orchestrator);
 
   // Error handling
   server.onerror = (error) => {
@@ -38,6 +50,7 @@ export function createServer(config: Config): Server {
 
   process.on('SIGINT', async () => {
     logger.info('Shutting down server...');
+    await orchestrator.shutdown();
     await server.close();
     process.exit(0);
   });
@@ -48,7 +61,7 @@ export function createServer(config: Config): Server {
 /**
  * Register MCP tool handlers
  */
-function registerToolHandlers(server: Server, config: Config): void {
+function registerToolHandlers(server: Server, orchestrator: Orchestrator): void {
   // List available tools
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const tools: Tool[] = [
@@ -226,22 +239,22 @@ function registerToolHandlers(server: Server, config: Config): void {
     try {
       switch (name) {
         case 'codebase_search':
-          return await handleCodebaseSearch(args);
+          return await handleCodebaseSearch(orchestrator, args);
 
         case 'indexing_status':
-          return await handleIndexingStatus(args);
+          return await handleIndexingStatus(orchestrator, args);
 
         case 'reindex':
-          return await handleReindex(args);
+          return await handleReindex(orchestrator, args);
 
         case 'configure_indexer':
-          return await handleConfigureIndexer(args);
+          return await handleConfigureIndexer(orchestrator, args);
 
         case 'clear_index':
-          return await handleClearIndex(args);
+          return await handleClearIndex(orchestrator, args);
 
         case 'validate_config':
-          return await handleValidateConfig(args);
+          return await handleValidateConfig(orchestrator, args);
 
         default:
           throw new Error(`Unknown tool: ${name}`);
@@ -261,143 +274,576 @@ function registerToolHandlers(server: Server, config: Config): void {
 }
 
 /**
- * Tool handler implementations (placeholders for now)
+ * Tool handler implementations
  */
 
-async function handleCodebaseSearch(args: any) {
-  // TODO: Implement actual search logic
-  return {
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify(
-          {
-            message: 'Search functionality will be implemented in Phase 6',
-            query: args.query,
-            placeholder: true,
-          },
-          null,
-          2
-        ),
-      },
-    ],
-  };
-}
-
-async function handleIndexingStatus(args: any) {
-  // TODO: Implement actual status logic
-  return {
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify(
-          {
-            status: 'standby',
-            statusIcon: '⚪',
-            progress: {
-              percentage: 0,
-              filesProcessed: 0,
-              filesTotal: 0,
-            },
-            stats: {
-              totalBlocks: 0,
-              totalVectors: 0,
-              languages: {},
-            },
-            message: 'Status tracking will be implemented in Phase 7',
-          },
-          null,
-          2
-        ),
-      },
-    ],
-  };
-}
-
-async function handleReindex(args: any) {
-  // TODO: Implement actual reindex logic
-  return {
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify(
-          {
-            success: false,
-            message: 'Reindexing functionality will be implemented in Phase 5',
-            filesQueued: 0,
-          },
-          null,
-          2
-        ),
-      },
-    ],
-  };
-}
-
-async function handleConfigureIndexer(args: any) {
-  // TODO: Implement actual configuration logic
-  return {
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify(
-          {
-            success: false,
-            message: 'Configuration update will be implemented',
-          },
-          null,
-          2
-        ),
-      },
-    ],
-  };
-}
-
-async function handleClearIndex(args: any) {
-  if (!args.confirm) {
+async function handleCodebaseSearch(orchestrator: Orchestrator, args: any) {
+  if (!orchestrator.isInitialized()) {
     return {
       content: [
         {
           type: 'text',
-          text: 'Error: Must set confirm=true to clear index',
+          text: 'Error: System is still initializing. Please wait a moment and try again.',
         },
       ],
     };
   }
 
-  // TODO: Implement actual clear logic
+  const search = orchestrator.getSearch();
+
+  const response = await search.search({
+    query: args.query,
+    limit: args.limit || 10,
+    threshold: args.threshold || 0.7,
+    fileTypes: args.fileTypes,
+    paths: args.paths,
+    languages: args.languages,
+    includeContext: args.includeContext ?? true,
+    contextLines: args.contextLines || 3,
+  });
+
+  // Format results for display
+  const formattedResults = response.results.map((result) => {
+    const lines = [
+      `**${result.file}:${result.line}** (score: ${result.score.toFixed(3)})`,
+      `Type: ${result.type}${result.name ? ` | Name: ${result.name}` : ''}`,
+      '',
+      '```' + (result.language || ''),
+      result.code,
+      '```',
+    ];
+
+    if (result.context) {
+      lines.push('', '**Context:**', '```' + (result.language || ''), result.context, '```');
+    }
+
+    if (result.relevanceFactors) {
+      const factors = result.relevanceFactors;
+      const factorLines = [];
+      if (factors.exactMatch) factorLines.push('- Exact match');
+      if (factors.nameMatch) factorLines.push('- Name match');
+      if (factorLines.length > 0) {
+        lines.push('', '**Relevance:**', ...factorLines);
+      }
+    }
+
+    return lines.join('\n');
+  });
+
+  const summary = [
+    `# Search Results for: "${response.query}"`,
+    '',
+    `Found ${response.stats.totalResults} results in ${response.stats.queryTime}ms`,
+    `(Search: ${response.stats.searchTime}ms, Ranking: ${response.stats.rankingTime}ms)`,
+    '',
+    '---',
+    '',
+  ];
+
+  const text = [...summary, ...formattedResults].join('\n');
+
   return {
     content: [
       {
         type: 'text',
-        text: JSON.stringify(
-          {
-            success: false,
-            message: 'Clear index functionality will be implemented in Phase 4',
-          },
-          null,
-          2
-        ),
+        text,
       },
     ],
   };
 }
 
-async function handleValidateConfig(args: any) {
-  // TODO: Implement actual validation logic
+async function handleIndexingStatus(orchestrator: Orchestrator, args: any) {
+  if (!orchestrator.isInitialized()) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: 'System Status: Initializing...\n\nPlease wait for initialization to complete.',
+        },
+      ],
+    };
+  }
+
+  const statusManager = orchestrator.getStatusManager();
+  const completeStatus = await statusManager.getCompleteStatus(args.detailed || false);
+  const display = statusManager.getStatusDisplay();
+
+  // Format status for display
+  const lines = [
+    `# Indexing Status`,
+    '',
+    `**Status:** ${display.icon} ${display.message}`,
+    '',
+  ];
+
+  // Progress section
+  if (completeStatus.status === 'indexing') {
+    const progress = completeStatus.progress;
+    lines.push(
+      '## Progress',
+      `- Percentage: ${progress.percentage.toFixed(1)}%`,
+      `- Files: ${progress.filesProcessed} / ${progress.filesTotal}`,
+      `- Current file: ${progress.currentFile || 'N/A'}`,
+      `- Rate: ${progress.rate?.toFixed(2) || '0'} files/sec`
+    );
+
+    if (progress.estimatedTimeRemaining) {
+      lines.push(
+        `- ETA: ${new Date(Date.now() + progress.estimatedTimeRemaining).toLocaleTimeString()}`
+      );
+    }
+
+    lines.push('');
+  }
+
+  // Statistics section
+  const stats = completeStatus.stats;
+  lines.push(
+    '## Statistics',
+    `- Total Files: ${stats.totalFiles}`,
+    `- Total Blocks: ${stats.totalBlocks}`,
+    `- Total Vectors: ${stats.totalVectors}`,
+    `- Avg Blocks/File: ${stats.averageBlocksPerFile.toFixed(2)}`,
+    `- Indexing Time: ${(stats.indexingTime / 1000).toFixed(2)}s`
+  );
+
+  if (stats.lastIndexed) {
+    lines.push(`- Last Indexed: ${stats.lastIndexed.toLocaleString()}`);
+  }
+
+  // Languages
+  if (Object.keys(stats.languages).length > 0) {
+    lines.push('', '### Languages');
+    Object.entries(stats.languages)
+      .sort(([, a], [, b]) => b - a)
+      .forEach(([lang, count]) => {
+        lines.push(`- ${lang}: ${count}`);
+      });
+  }
+
+  // File types
+  if (Object.keys(stats.fileTypes).length > 0) {
+    lines.push('', '### File Types');
+    Object.entries(stats.fileTypes)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 10)
+      .forEach(([type, count]) => {
+        lines.push(`- ${type}: ${count}`);
+      });
+  }
+
+  // Errors section
+  if (completeStatus.errors.length > 0) {
+    lines.push('', `## Recent Errors (${completeStatus.errors.length})`);
+    completeStatus.errors.slice(-5).forEach((error) => {
+      lines.push(`- **${error.file}**: ${error.error}`);
+      if (error.retries) {
+        lines.push(`  Retries: ${error.retries}`);
+      }
+    });
+  }
+
+  // System info
+  lines.push(
+    '',
+    '## System',
+    `- Watching: ${completeStatus.isWatching ? 'Yes' : 'No'}`,
+    `- Queue Size: ${completeStatus.queueSize}`
+  );
+
+  if (completeStatus.currentBranch) {
+    lines.push(`- Git Branch: ${completeStatus.currentBranch}`);
+  }
+
   return {
     content: [
       {
         type: 'text',
-        text: JSON.stringify(
-          {
-            valid: false,
-            message: 'Validation will be implemented in Phases 3-4',
-          },
-          null,
-          2
-        ),
+        text: lines.join('\n'),
       },
     ],
   };
+}
+
+async function handleReindex(orchestrator: Orchestrator, args: any) {
+  if (!orchestrator.isInitialized()) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: 'Error: System is still initializing. Please wait a moment and try again.',
+        },
+      ],
+    };
+  }
+
+  const indexer = orchestrator.getIndexer();
+  const mode = args.mode || 'incremental';
+
+  try {
+    switch (mode) {
+      case 'full':
+        logger.info('Starting full reindex...');
+        await indexer.indexAll({ force: true });
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `# Full Reindex Complete\n\n✓ Successfully reindexed all files\n\nUse \`indexing_status\` to see detailed statistics.`,
+            },
+          ],
+        };
+
+      case 'incremental':
+        logger.info('Starting incremental reindex...');
+        await indexer.indexAll({ force: false });
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `# Incremental Reindex Complete\n\n✓ Successfully indexed changed files\n\nUse \`indexing_status\` to see detailed statistics.`,
+            },
+          ],
+        };
+
+      default:
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error: Unknown reindex mode: ${mode}. Use 'full' or 'incremental'.`,
+            },
+          ],
+        };
+    }
+  } catch (error) {
+    logger.error('Reindex failed:', error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `# Reindex Failed\n\n❌ ${formatError(error)}`,
+        },
+      ],
+    };
+  }
+}
+
+async function handleConfigureIndexer(orchestrator: Orchestrator, args: any) {
+  if (!orchestrator.isInitialized()) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: 'Error: System is still initializing. Please wait a moment and try again.',
+        },
+      ],
+    };
+  }
+
+  const currentConfig = orchestrator.getConfig();
+  const updates: any = {};
+
+  // Build update object
+  if (args.provider) {
+    updates.embedding = {
+      ...currentConfig.embedding,
+      provider: args.provider,
+      ...(args.providerConfig || {}),
+    };
+  } else if (args.providerConfig) {
+    updates.embedding = {
+      ...currentConfig.embedding,
+      ...args.providerConfig,
+    };
+  }
+
+  if (args.qdrantConfig) {
+    updates.qdrant = {
+      ...currentConfig.qdrant,
+      ...args.qdrantConfig,
+    };
+  }
+
+  if (args.indexingConfig) {
+    updates.indexing = {
+      ...currentConfig.indexing,
+      ...args.indexingConfig,
+    };
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: 'Error: No configuration updates specified',
+        },
+      ],
+    };
+  }
+
+  try {
+    logger.info('Updating configuration...', updates);
+
+    // Validate if requested
+    if (args.validate !== false) {
+      logger.info('Validating new configuration...');
+
+      // Test new provider if changed
+      if (updates.embedding) {
+        const testConfig = { ...currentConfig, ...updates };
+        const providerConfig: ProviderConfig = {
+          apiKey: testConfig.embedding.apiKey,
+          baseUrl: testConfig.embedding.baseUrl,
+          model: testConfig.embedding.model,
+          dimensions: testConfig.embedding.dimensions,
+        };
+        const testEmbedder = createEmbeddingProvider(testConfig.embedding.provider, providerConfig);
+        const health = await testEmbedder.healthCheck();
+
+        if (!health.available) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `# Configuration Validation Failed\n\n❌ Embedding provider test failed: ${health.error}`,
+              },
+            ],
+          };
+        }
+      }
+
+      // Test new storage if changed
+      if (updates.qdrant) {
+        const testStorage = new Storage(updates.qdrant);
+        const health = await testStorage.healthCheck();
+
+        if (!health.connected) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `# Configuration Validation Failed\n\n❌ Qdrant connection test failed`,
+              },
+            ],
+          };
+        }
+      }
+    }
+
+    // Apply configuration
+    await orchestrator.reconfigure(updates);
+
+    const changedFields = Object.keys(updates).join(', ');
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `# Configuration Updated\n\n✓ Successfully updated: ${changedFields}\n\nThe indexer has been restarted with the new configuration.`,
+        },
+      ],
+    };
+  } catch (error) {
+    logger.error('Configuration update failed:', error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `# Configuration Update Failed\n\n❌ ${formatError(error)}`,
+        },
+      ],
+    };
+  }
+}
+
+async function handleClearIndex(orchestrator: Orchestrator, args: any) {
+  if (!args.confirm) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: '# Clear Index\n\n⚠️ **Safety check required**\n\nTo clear the index, you must set `confirm: true`.\n\nThis will permanently delete all indexed data.',
+        },
+      ],
+    };
+  }
+
+  if (!orchestrator.isInitialized()) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: 'Error: System is still initializing. Please wait a moment and try again.',
+        },
+      ],
+    };
+  }
+
+  const storage = orchestrator.getStorage();
+  const config = orchestrator.getConfig();
+  const collectionName = args.workspace || config.qdrant.collectionName;
+
+  try {
+    logger.info(`Clearing collection: ${collectionName}`);
+
+    // Check if collection exists
+    const exists = await storage.collections.exists(collectionName);
+
+    if (!exists) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `# Collection Not Found\n\n❌ Collection "${collectionName}" does not exist.`,
+          },
+        ],
+      };
+    }
+
+    // Get stats before deletion
+    const info = await storage.collections.info(collectionName);
+    const pointCount = info.pointsCount;
+
+    // Delete collection
+    await storage.collections.delete(collectionName);
+
+    // Recreate collection
+    await storage.collections.create({
+      name: collectionName,
+      vectorSize: config.embedding.dimensions,
+      distance: 'Cosine',
+    });
+
+    // Reset status
+    const statusManager = orchestrator.getStatusManager();
+    statusManager.reset();
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `# Index Cleared\n\n✓ Successfully cleared collection "${collectionName}"\n\nDeleted ${pointCount} vectors.\n\nThe collection has been recreated and is ready for indexing.`,
+        },
+      ],
+    };
+  } catch (error) {
+    logger.error('Clear index failed:', error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `# Clear Index Failed\n\n❌ ${formatError(error)}`,
+        },
+      ],
+    };
+  }
+}
+
+async function handleValidateConfig(orchestrator: Orchestrator, args: any) {
+  const component = args.component || 'all';
+  const results: string[] = ['# Configuration Validation', ''];
+
+  try {
+    // Validate Qdrant connection
+    if (component === 'all' || component === 'qdrant') {
+      results.push('## Qdrant Storage');
+      try {
+        const storage = orchestrator.getStorage();
+        const health = await storage.healthCheck();
+
+        if (health.connected) {
+          results.push(
+            `✓ Connected successfully`,
+            `- Collections: ${health.collections}`,
+            `- URL: ${orchestrator.getConfig().qdrant.url}`
+          );
+
+          // Check collection
+          const collectionName = orchestrator.getConfig().qdrant.collectionName;
+          const exists = await storage.collections.exists(collectionName);
+
+          if (exists) {
+            const info = await storage.collections.info(collectionName);
+            results.push(
+              `- Collection "${collectionName}": ${info.pointsCount} points, ${info.indexedVectorsCount} indexed vectors`
+            );
+          } else {
+            results.push(`- Collection "${collectionName}": Not created yet`);
+          }
+        } else {
+          results.push(`❌ Connection failed`);
+        }
+      } catch (error) {
+        results.push(`❌ Error: ${formatError(error)}`);
+      }
+      results.push('');
+    }
+
+    // Validate embedding provider
+    if (component === 'all' || component === 'embedder') {
+      results.push('## Embedding Provider');
+      try {
+        const embedder = orchestrator.getEmbedder();
+        const config = orchestrator.getConfig();
+        const health = await embedder.healthCheck();
+
+        if (health.available) {
+          results.push(
+            `✓ Provider available`,
+            `- Provider: ${config.embedding.provider}`,
+            `- Model: ${config.embedding.model || 'default'}`,
+            `- Dimensions: ${config.embedding.dimensions}`
+          );
+
+          // Test embedding generation
+          results.push('- Testing embedding generation...');
+          const testStart = Date.now();
+          const testResult = await embedder.embed('test query');
+          const testTime = Date.now() - testStart;
+
+          results.push(
+            `✓ Test embedding successful`,
+            `  - Dimensions: ${testResult.values.length}`,
+            `  - Time: ${testTime}ms`
+          );
+        } else {
+          results.push(`❌ Provider unavailable: ${health.error}`);
+        }
+      } catch (error) {
+        results.push(`❌ Error: ${formatError(error)}`);
+      }
+      results.push('');
+    }
+
+    // Overall status
+    const allPassed = !results.join('\n').includes('❌');
+    results.push(
+      '---',
+      '',
+      allPassed
+        ? '✓ **All validation checks passed**'
+        : '❌ **Some validation checks failed**'
+    );
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: results.join('\n'),
+        },
+      ],
+    };
+  } catch (error) {
+    logger.error('Validation failed:', error);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `# Validation Failed\n\n❌ ${formatError(error)}`,
+        },
+      ],
+    };
+  }
 }

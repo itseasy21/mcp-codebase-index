@@ -381,11 +381,109 @@ mcp-codebase-index/
 
 ---
 
-## ⚙️ Configuration Schema
+## ⚙️ Configuration
 
-### Environment Variables (`.env`)
+The MCP server supports two configuration methods:
+1. **MCP Client Configuration** (Recommended for production)
+2. **Environment Variables** (For development and standalone use)
+
+### Method 1: MCP Client Configuration (Recommended)
+
+When using with Claude Desktop or other MCP clients, configure via the client's config file.
+
+#### Claude Desktop Configuration
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%/Claude/claude_desktop_config.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "codebase-index": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-codebase-index"
+      ],
+      "env": {
+        "CODEBASE_PATH": "/path/to/your/repository",
+        "EMBEDDING_PROVIDER": "gemini",
+        "GEMINI_API_KEY": "your_api_key_here",
+        "QDRANT_URL": "http://localhost:6333"
+      }
+    }
+  }
+}
+```
+
+#### Alternative: Using Local Installation
+
+```json
+{
+  "mcpServers": {
+    "codebase-index": {
+      "command": "node",
+      "args": [
+        "/path/to/mcp-codebase-index/dist/index.js"
+      ],
+      "env": {
+        "CODEBASE_PATH": "/Users/yourname/projects/myrepo",
+        "EMBEDDING_PROVIDER": "gemini",
+        "GEMINI_API_KEY": "your_gemini_api_key",
+        "QDRANT_URL": "http://localhost:6333"
+      }
+    }
+  }
+}
+```
+
+#### Example: Using Ollama (Local, Free)
+
+```json
+{
+  "mcpServers": {
+    "codebase-index": {
+      "command": "npx",
+      "args": ["-y", "mcp-codebase-index"],
+      "env": {
+        "CODEBASE_PATH": "/Users/yourname/projects/myrepo",
+        "EMBEDDING_PROVIDER": "ollama",
+        "OLLAMA_BASE_URL": "http://localhost:11434",
+        "OLLAMA_MODEL": "nomic-embed-text",
+        "QDRANT_URL": "http://localhost:6333"
+      }
+    }
+  }
+}
+```
+
+#### Example: Using Qdrant Cloud
+
+```json
+{
+  "mcpServers": {
+    "codebase-index": {
+      "command": "npx",
+      "args": ["-y", "mcp-codebase-index"],
+      "env": {
+        "CODEBASE_PATH": "/Users/yourname/projects/myrepo",
+        "EMBEDDING_PROVIDER": "gemini",
+        "GEMINI_API_KEY": "your_gemini_api_key",
+        "QDRANT_URL": "https://xyz-123.cloud.qdrant.io",
+        "QDRANT_API_KEY": "your_qdrant_api_key"
+      }
+    }
+  }
+}
+```
+
+### Method 2: Environment Variables (Development)
+
+For local development or standalone use, create a `.env` file:
 
 ```bash
+# Required: Path to codebase
+CODEBASE_PATH=/path/to/your/repository
+
 # Embedding Provider (gemini|openai|ollama|openai-compatible)
 EMBEDDING_PROVIDER=gemini
 
@@ -423,6 +521,42 @@ GIT_AUTO_DETECT_CHANGES=true
 
 # Logging
 LOG_LEVEL=info  # debug|info|warn|error
+```
+
+### Method 3: Command-Line Arguments
+
+For advanced use cases, pass configuration via command-line:
+
+```bash
+npx mcp-codebase-index \
+  --codebase-path /path/to/repo \
+  --embedding-provider gemini \
+  --gemini-api-key your_key \
+  --qdrant-url http://localhost:6333
+```
+
+### Configuration Validation
+
+The server validates all configuration on startup. Use the `validate_config` tool to test configuration without indexing:
+
+```typescript
+// Via MCP tool
+validate_config({ component: 'all' })
+
+// Returns:
+{
+  valid: true,
+  qdrant: {
+    connected: true,
+    version: "1.7.0",
+    latency: 15
+  },
+  embedder: {
+    available: true,
+    model: "text-embedding-004",
+    testEmbedding: true
+  }
+}
 ```
 
 ### Configuration File (`codebase-index.config.json`)
@@ -1400,18 +1534,54 @@ npx typedoc --out docs src
 {
   "name": "mcp-codebase-index",
   "version": "0.1.0",
+  "description": "MCP server for semantic codebase search using AI embeddings",
   "type": "module",
   "main": "./dist/index.js",
   "bin": {
     "mcp-codebase-index": "./dist/index.js"
   },
   "scripts": {
+    "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "test": "vitest",
+    "test:watch": "vitest --watch",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write src/**/*.ts",
     "prepublishOnly": "npm run build"
-  }
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "codebase-search",
+    "semantic-search",
+    "embeddings",
+    "vector-search",
+    "qdrant",
+    "claude",
+    "ai"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/mcp-codebase-index"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ]
 }
 ```
+
+**Important Notes**:
+1. The `bin` entry makes the package executable as `mcp-codebase-index`
+2. The shebang (`#!/usr/bin/env node`) must be added to `dist/index.js` during build
+3. Environment variables are passed by the MCP client (Claude Desktop, etc.)
+4. No `.env` file is needed when used via MCP client
 
 #### 10.2 Build and Test
 
@@ -2757,41 +2927,298 @@ If issues persist:
 
 ## 🎬 Getting Started (Post-Implementation)
 
-### Quick Start
+### Installation Options
+
+#### Option 1: Via npx (Recommended - No Installation Required)
+
+Use directly without installation via Claude Desktop or other MCP clients.
+
+**Step 1: Start Qdrant (Local)**
 
 ```bash
-# 1. Install
+docker run -d -p 6333:6333 --name qdrant qdrant/qdrant
+```
+
+Or use Qdrant Cloud (https://cloud.qdrant.io) for free tier.
+
+**Step 2: Get API Key**
+
+- Gemini (Free): https://aistudio.google.com/app/apikey
+- Or use Ollama locally (no API key needed)
+
+**Step 3: Configure in Claude Desktop**
+
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%/Claude/claude_desktop_config.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "codebase-index": {
+      "command": "npx",
+      "args": ["-y", "mcp-codebase-index"],
+      "env": {
+        "CODEBASE_PATH": "/Users/yourname/projects/myrepo",
+        "EMBEDDING_PROVIDER": "gemini",
+        "GEMINI_API_KEY": "your_gemini_api_key_here",
+        "QDRANT_URL": "http://localhost:6333"
+      }
+    }
+  }
+}
+```
+
+**Step 4: Restart Claude Desktop**
+
+The server will automatically start and begin indexing your codebase.
+
+**Step 5: Use in Claude**
+
+```
+# In Claude Desktop chat:
+"Search for authentication functions in my codebase"
+"Find where database connections are initialized"
+"Show me all React components that use useState"
+```
+
+---
+
+#### Option 2: Global Installation
+
+If you prefer to install globally:
+
+```bash
+# 1. Install globally
 npm install -g mcp-codebase-index
 
-# 2. Configure
-cp .env.example .env
-# Edit .env with your API keys
+# 2. Start Qdrant
+docker run -d -p 6333:6333 --name qdrant qdrant/qdrant
 
-# 3. Start Qdrant (Docker)
-docker run -p 6333:6333 qdrant/qdrant
-
-# 4. Index your codebase
-mcp-codebase-index init
-mcp-codebase-index index /path/to/your/repo
-
-# 5. Connect to Claude
-# Add to Claude Desktop config:
+# 3. Configure Claude Desktop
+# Edit config file with:
 {
   "mcpServers": {
     "codebase-index": {
       "command": "mcp-codebase-index",
-      "args": ["serve"],
       "env": {
-        "GEMINI_API_KEY": "your_key_here"
+        "CODEBASE_PATH": "/path/to/your/repo",
+        "EMBEDDING_PROVIDER": "gemini",
+        "GEMINI_API_KEY": "your_api_key"
       }
     }
   }
 }
 
-# 6. Search in Claude
-# "Find all functions that handle user authentication"
-# "Show me how database connections are initialized"
+# 4. Restart Claude Desktop and start searching!
 ```
+
+---
+
+#### Option 3: Local Development (From Source)
+
+```bash
+# 1. Clone repository
+git clone https://github.com/your-org/mcp-codebase-index
+cd mcp-codebase-index
+
+# 2. Install dependencies
+npm install
+
+# 3. Create .env file
+cp .env.example .env
+# Edit .env with your configuration
+
+# 4. Build
+npm run build
+
+# 5. Start Qdrant
+docker run -d -p 6333:6333 --name qdrant qdrant/qdrant
+
+# 6. Configure Claude Desktop
+{
+  "mcpServers": {
+    "codebase-index": {
+      "command": "node",
+      "args": ["/path/to/mcp-codebase-index/dist/index.js"],
+      "env": {
+        "CODEBASE_PATH": "/path/to/your/repo",
+        "EMBEDDING_PROVIDER": "gemini",
+        "GEMINI_API_KEY": "your_api_key"
+      }
+    }
+  }
+}
+
+# 7. Develop
+npm run dev  # Watch mode
+npm run test # Run tests
+```
+
+---
+
+### Quick Start Examples
+
+#### Example 1: Using with Gemini (Free)
+
+```json
+{
+  "mcpServers": {
+    "my-project": {
+      "command": "npx",
+      "args": ["-y", "mcp-codebase-index"],
+      "env": {
+        "CODEBASE_PATH": "/Users/me/projects/my-app",
+        "EMBEDDING_PROVIDER": "gemini",
+        "GEMINI_API_KEY": "AIza...",
+        "QDRANT_URL": "http://localhost:6333"
+      }
+    }
+  }
+}
+```
+
+#### Example 2: Using with Ollama (100% Local, 100% Free)
+
+```bash
+# Start Ollama
+ollama serve &
+ollama pull nomic-embed-text
+
+# Start Qdrant
+docker run -d -p 6333:6333 qdrant/qdrant
+
+# Configure Claude Desktop
+{
+  "mcpServers": {
+    "my-project": {
+      "command": "npx",
+      "args": ["-y", "mcp-codebase-index"],
+      "env": {
+        "CODEBASE_PATH": "/Users/me/projects/my-app",
+        "EMBEDDING_PROVIDER": "ollama",
+        "OLLAMA_BASE_URL": "http://localhost:11434",
+        "OLLAMA_MODEL": "nomic-embed-text",
+        "QDRANT_URL": "http://localhost:6333"
+      }
+    }
+  }
+}
+```
+
+#### Example 3: Using with Qdrant Cloud
+
+```json
+{
+  "mcpServers": {
+    "my-project": {
+      "command": "npx",
+      "args": ["-y", "mcp-codebase-index"],
+      "env": {
+        "CODEBASE_PATH": "/Users/me/projects/my-app",
+        "EMBEDDING_PROVIDER": "gemini",
+        "GEMINI_API_KEY": "AIza...",
+        "QDRANT_URL": "https://xyz-example.cloud.qdrant.io",
+        "QDRANT_API_KEY": "your-qdrant-api-key"
+      }
+    }
+  }
+}
+```
+
+---
+
+### Verifying Installation
+
+After configuration, check that the MCP server is working:
+
+1. **Restart Claude Desktop**
+
+2. **Check MCP Status** (in Claude chat):
+   ```
+   Can you check the status of my codebase index?
+   ```
+
+3. **Expected Response**:
+   ```
+   🟡 Yellow: Indexing in progress (35% complete)
+   - Processed 1,234 files
+   - Found 5,678 code blocks
+   - Current file: src/components/Header.tsx
+   ```
+
+4. **Once Indexed** (🟢 Green):
+   ```
+   Search for "authentication functions"
+   ```
+
+---
+
+### Troubleshooting First-Time Setup
+
+#### Issue: Server Not Starting
+
+```bash
+# Check Claude Desktop logs
+# macOS:
+tail -f ~/Library/Logs/Claude/mcp*.log
+
+# Windows:
+# Check %APPDATA%/Claude/logs/
+```
+
+**Common causes:**
+- Invalid API key → Verify key at provider's dashboard
+- Qdrant not running → `docker ps | grep qdrant`
+- Invalid codebase path → Check path exists and is readable
+
+#### Issue: Indexing Not Starting
+
+```
+# In Claude Desktop, ask:
+"Validate my codebase index configuration"
+```
+
+This runs `validate_config` and shows any configuration errors.
+
+#### Issue: Search Returns No Results
+
+**Causes:**
+- Indexing still in progress (🟡 Yellow) → Wait for 🟢 Green
+- No code blocks found → Check supported languages
+- Threshold too high → Lower similarity threshold in search
+
+**Solution:**
+```
+# Check status
+"What's the indexing status?"
+
+# Manual reindex if needed
+"Reindex my codebase"
+```
+
+---
+
+### Next Steps
+
+Once setup is complete:
+
+1. **Explore Search Capabilities**:
+   - "Find all API endpoints"
+   - "Show me error handling code"
+   - "Locate database migration files"
+
+2. **Check Indexing Status**:
+   - "What percentage of my codebase is indexed?"
+   - "How many code blocks were found?"
+
+3. **Customize Configuration**:
+   - Adjust `INDEX_MAX_FILE_SIZE` for large files
+   - Add patterns to `.mcpignore` to exclude files
+   - Change `INDEX_CONCURRENCY` for faster/slower indexing
+
+4. **Read Full Documentation**:
+   - Configuration options (see Configuration section above)
+   - Troubleshooting guide (see below)
+   - Advanced features (see Future Enhancements)
 
 ---
 

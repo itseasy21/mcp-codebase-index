@@ -106,7 +106,7 @@ export class ChunkQualityFilter {
    */
   private getMeaningfulContentRatio(code: string): number {
     // Remove whitespace, braces, semicolons, etc.
-    const meaningfulChars = code.replace(/[\s{}\[\]();,]/g, '').length;
+    const meaningfulChars = code.replace(/[\s{}[\]();,]/g, '').length;
     const totalChars = code.length;
 
     return totalChars > 0 ? meaningfulChars / totalChars : 0;

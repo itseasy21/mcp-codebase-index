@@ -42,9 +42,12 @@ export abstract class BaseExtractor implements CodeExtractor {
     const traverse = (node: Parser.SyntaxNode) => {
       // Check if this node type should be extracted
       if (targetTypes.includes(node.type)) {
-        const result = this.extractNode(node, filePath, content);
-        if (result) {
-          blocks.push(this.createCodeBlock(result, filePath, content));
+        // Check if node should be included (allows subclasses to filter)
+        if (this.shouldIncludeNode(node)) {
+          const result = this.extractNode(node, filePath, content);
+          if (result) {
+            blocks.push(this.createCodeBlock(result, filePath, content));
+          }
         }
       }
 
@@ -71,6 +74,14 @@ export abstract class BaseExtractor implements CodeExtractor {
    * Get target node types for extraction
    */
   abstract getTargetNodeTypes(): string[];
+
+  /**
+   * Check if a node should be included in extraction
+   * Override this in subclasses to implement custom filtering
+   */
+  protected shouldIncludeNode(_node: Parser.SyntaxNode): boolean {
+    return true; // Default: include all nodes
+  }
 
   /**
    * Create a CodeBlock from extraction result

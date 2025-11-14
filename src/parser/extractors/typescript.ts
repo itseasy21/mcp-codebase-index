@@ -27,6 +27,129 @@ export class TypeScriptExtractor extends BaseExtractor {
     ];
   }
 
+  /**
+   * Check if a node should be included in extraction
+   * Filters out pure JSX elements without logic
+   */
+  protected shouldIncludeNode(node: Parser.SyntaxNode): boolean {
+    // For JSX/TSX files, check if the node is a pure JSX element
+    if (this.isPureJSXElement(node)) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Check if a node is a pure JSX element without any logic
+   * Pure JSX elements are just markup with no handlers, conditions, or state
+   */
+  private isPureJSXElement(node: Parser.SyntaxNode): boolean {
+    // Only check within function/component bodies
+    if (node.type !== 'lexical_declaration' && node.type !== 'variable_declaration') {
+      return false;
+    }
+
+    // Check if this is a React component (starts with uppercase or contains JSX)
+    const declarators = this.getChildrenOfType(node, 'variable_declarator');
+    if (declarators.length === 0) return false;
+
+    const declarator = declarators[0];
+    const valueNode = this.getChildByFieldName(declarator, 'value');
+
+    if (!valueNode) return false;
+
+    // Check if the value is just a JSX element without logic
+    return this.isJSXWithoutLogic(valueNode);
+  }
+
+  /**
+   * Check if a node contains only JSX markup without handlers or logic
+   */
+  private isJSXWithoutLogic(node: Parser.SyntaxNode): boolean {
+    // Not a JSX-containing expression
+    if (!this.containsJSX(node)) {
+      return false;
+    }
+
+    // Check for event handlers (onClick, onChange, etc.)
+    if (this.hasEventHandlers(node)) {
+      return false;
+    }
+
+    // Check for state/hooks (useState, useEffect, etc.)
+    if (this.hasHooksOrState(node)) {
+      return false;
+    }
+
+    // Check for conditional rendering or loops
+    if (this.hasConditionalLogic(node)) {
+      return false;
+    }
+
+    // If it's pure markup, filter it out
+    return true;
+  }
+
+  /**
+   * Check if node contains JSX syntax
+   */
+  private containsJSX(node: Parser.SyntaxNode): boolean {
+    if (node.type === 'jsx_element' || node.type === 'jsx_self_closing_element') {
+      return true;
+    }
+
+    for (const child of node.children) {
+      if (this.containsJSX(child)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if node has event handlers (onClick, onChange, etc.)
+   */
+  private hasEventHandlers(node: Parser.SyntaxNode): boolean {
+    const text = node.text;
+    // Common event handler patterns
+    const eventPattern = /on[A-Z]\w+\s*=|addEventListener|removeEventListener/;
+    return eventPattern.test(text);
+  }
+
+  /**
+   * Check if node uses React hooks or state
+   */
+  private hasHooksOrState(node: Parser.SyntaxNode): boolean {
+    const text = node.text;
+    // React hooks and state patterns
+    const hooksPattern = /use[A-Z]\w+|useState|useEffect|useCallback|useMemo|useRef|this\.state|this\.setState/;
+    return hooksPattern.test(text);
+  }
+
+  /**
+   * Check if node has conditional logic
+   */
+  private hasConditionalLogic(node: Parser.SyntaxNode): boolean {
+    for (const child of node.children) {
+      if (
+        child.type === 'if_statement' ||
+        child.type === 'ternary_expression' ||
+        child.type === 'for_statement' ||
+        child.type === 'while_statement' ||
+        child.type === 'switch_statement'
+      ) {
+        return true;
+      }
+
+      if (this.hasConditionalLogic(child)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   protected extractNode(
     node: Parser.SyntaxNode,
     _filePath: string,

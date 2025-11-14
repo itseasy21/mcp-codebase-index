@@ -303,7 +303,7 @@ After saving the configuration, restart your IDE/editor. The server will automat
 
 ## Usage
 
-Once configured, you can ask Claude to search your codebase:
+Once configured, you can ask your AI assistant to search your codebase:
 
 **Example queries:**
 - "Find the authentication middleware"
@@ -319,7 +319,7 @@ Once configured, you can ask Claude to search your codebase:
 
 ## Available Tools
 
-The MCP server provides these tools to Claude:
+The MCP server provides these tools to your AI assistant:
 
 ### `codebase_search`
 Search your codebase using natural language or code queries.
@@ -458,19 +458,19 @@ If using a free API tier:
 ### Example 1: Find Authentication Code
 ```
 You: "Find all authentication middleware in the codebase"
-Claude: [Uses codebase_search tool with query "authentication middleware"]
+AI Assistant: [Uses codebase_search tool with query "authentication middleware"]
 ```
 
 ### Example 2: Reindex After Git Pull
 ```
 You: "I just pulled new changes, please reindex"
-Claude: [Uses reindex tool with mode "incremental"]
+AI Assistant: [Uses reindex tool with mode "incremental"]
 ```
 
 ### Example 3: Search Specific Directory
 ```
 You: "Search for error handlers in the src/api directory"
-Claude: [Uses codebase_search with query "error handlers" and paths ["src/api"]]
+AI Assistant: [Uses codebase_search with query "error handlers" and paths ["src/api"]]
 ```
 
 ## Contributing

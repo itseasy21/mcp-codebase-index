@@ -175,10 +175,8 @@ export class StatusManager {
     const status = this.stateMachine.getStatus();
     const progress = this.progressTracker.getProgress();
 
-    // Update stats if not in standby
-    if (status !== 'standby') {
-      await this.updateStats();
-    }
+    // Always update stats to get latest counts from storage
+    await this.updateStats();
 
     return {
       status,

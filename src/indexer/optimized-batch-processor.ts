@@ -1,55 +1,53 @@
 /**
- * Batch processor for indexing files
+ * Optimized batch processor with cross-file batching
+ * Much faster than original by reducing API overhead
  */
 
 import { join } from 'path';
 import type { CodeParser } from '../parser/index.js';
 import type { EmbeddingProvider } from '../embeddings/base.js';
 import type { Storage } from '../storage/index.js';
-import type { Point } from '../storage/types.js';
 import type { FileIndexingResult, BatchIndexingResult } from './types.js';
+import { CrossFileBatcher } from './cross-file-batcher.js';
 import { logger } from '../utils/logger.js';
-import { IndexingError } from '../utils/errors.js';
-import { hashContent } from '../utils/file-utils.js';
 
-/**
- * Convert a SHA256 hash to UUID format
- * Takes first 32 hex chars (128 bits) and formats as UUID (8-4-4-4-12)
- */
-function hashToUUID(hash: string): string {
-  // Take first 32 characters (128 bits)
-  const hex = hash.substring(0, 32);
-  // Format as UUID: 8-4-4-4-12
-  return `${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20, 32)}`;
-}
-
-export interface BatchProcessorOptions {
+export interface OptimizedBatchProcessorOptions {
   basePath: string;
   collectionName: string;
   concurrency?: number;
   batchSize?: number;
+  crossFileBatchSize?: number; // How many blocks to accumulate before embedding
 }
 
 /**
- * Process files in batches with concurrency control
+ * Optimized processor that batches embeddings and storage across files
  */
-export class BatchProcessor {
+export class OptimizedBatchProcessor {
   private concurrency: number;
   private batchSize: number;
+  private crossFileBatcher: CrossFileBatcher;
 
   constructor(
     private parser: CodeParser,
-    private embedder: EmbeddingProvider,
+    embedder: EmbeddingProvider,
     private storage: Storage,
-    private options: BatchProcessorOptions
+    private options: OptimizedBatchProcessorOptions
   ) {
-    // Lower defaults for better memory management
     this.concurrency = options.concurrency || 3;
     this.batchSize = options.batchSize || 20;
+
+    // Cross-file batcher for embedding optimization
+    this.crossFileBatcher = new CrossFileBatcher({
+      embedder,
+      storage,
+      collectionName: options.collectionName,
+      maxBlocksPerBatch: options.crossFileBatchSize || 200, // Batch up to 200 blocks
+      maxPointsPerUpsert: 100, // Qdrant batch size
+    });
   }
 
   /**
-   * Process a single file
+   * Process a single file - parse and add to cross-file batch
    */
   async processFile(file: string): Promise<FileIndexingResult> {
     const startTime = Date.now();
@@ -74,50 +72,16 @@ export class BatchProcessor {
 
       logger.debug(`Extracted ${parseResult.blocks.length} blocks from ${file}`);
 
-      // Generate embeddings for all blocks with truncation for large code
-      const MAX_CHARS_PER_BLOCK = 8000; // ~8KB limit per block for safety
-      const texts = parseResult.blocks.map((block) => {
-        if (block.code.length > MAX_CHARS_PER_BLOCK) {
-          return block.code.substring(0, MAX_CHARS_PER_BLOCK) + '\n// ... (truncated)';
-        }
-        return block.code;
-      });
-      const embeddingResult = await this.embedder.embedBatch(texts);
+      // Add blocks to cross-file batcher instead of processing immediately
+      this.crossFileBatcher.addBlocks(file, parseResult.blocks);
 
-      // Create points for Qdrant with UUID-formatted IDs
-      const points: Point[] = parseResult.blocks.map((block, index) => {
-        // Create a unique point ID by hashing file location and converting to UUID format
-        const locationHash = hashContent(`${block.file}:${block.line}:${block.endLine}`);
-        const pointId = hashToUUID(locationHash);
-
-        return {
-          id: pointId,
-          vector: embeddingResult.embeddings[index].values,
-          payload: {
-            file: block.file,
-            line: block.line,
-            endLine: block.endLine,
-            code: block.code,
-            type: block.type,
-            name: block.name,
-            language: block.language,
-            metadata: block.metadata || {},
-            hash: hashContent(block.code),
-            indexed_at: new Date().toISOString(),
-          },
-        };
-      });
-
-      // Store in Qdrant
-      await this.storage.vectors.upsertBatch(this.options.collectionName, points);
-
+      const blocksIndexed = parseResult.blocks.length;
       const duration = Date.now() - startTime;
-      const blocksIndexed = points.length;
-      logger.info(`Indexed ${file}: ${blocksIndexed} blocks in ${duration}ms`);
 
-      // Clear large objects to help garbage collection
-      texts.length = 0;
-      points.length = 0;
+      // Flush if batch is full
+      if (this.crossFileBatcher.shouldFlush()) {
+        await this.crossFileBatcher.flush();
+      }
 
       return {
         file,
@@ -192,6 +156,11 @@ export class BatchProcessor {
       results.push(...workerResult);
     }
 
+    // Flush any remaining blocks in the cross-file batcher
+    if (this.crossFileBatcher.getPendingCount() > 0) {
+      await this.crossFileBatcher.flush();
+    }
+
     // Clear references for garbage collection
     workerResults.length = 0;
 
@@ -234,11 +203,16 @@ export class BatchProcessor {
       if (i + this.batchSize < files.length) {
         await new Promise((resolve) => setTimeout(resolve, 100));
 
-        // Suggest garbage collection if available (only works with --expose-gc flag)
+        // Suggest garbage collection if available
         if (global.gc) {
           global.gc();
         }
       }
+    }
+
+    // Final flush to ensure all blocks are processed
+    if (this.crossFileBatcher.getPendingCount() > 0) {
+      await this.crossFileBatcher.flush();
     }
 
     // Aggregate results
@@ -276,7 +250,18 @@ export class BatchProcessor {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error(`Failed to delete file ${file}: ${message}`);
-      throw new IndexingError(`Failed to delete file: ${message}`, file);
+      throw error;
     }
+  }
+
+  /**
+   * Get batcher statistics
+   */
+  getStats() {
+    return {
+      ...this.crossFileBatcher.getStats(),
+      concurrency: this.concurrency,
+      batchSize: this.batchSize,
+    };
   }
 }

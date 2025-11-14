@@ -10,6 +10,8 @@ import type { Storage } from '../storage/index.js';
 import { FileWatcher } from './file-watcher.js';
 import { IndexingQueue } from './indexing-queue.js';
 import { BatchProcessor } from './batch-processor.js';
+import { OptimizedBatchProcessor } from './optimized-batch-processor.js';
+import { ParallelFileDiscovery } from './parallel-discovery.js';
 import { GitBranchWatcher, isGitRepository } from '../utils/git-utils.js';
 import { FileHashCache } from '../utils/file-hash.js';
 import type {
@@ -31,6 +33,7 @@ export interface IndexerConfig {
   watchBranches?: boolean;
   respectGitignore?: boolean;
   useMcpignore?: boolean;
+  useOptimizations?: boolean; // Enable optimized batch processing and parallel discovery
 }
 
 /**
@@ -40,8 +43,9 @@ export class Indexer {
   private fileWatcher: FileWatcher | null = null;
   private branchWatcher: GitBranchWatcher | null = null;
   private queue: IndexingQueue;
-  private processor: BatchProcessor;
+  private processor: BatchProcessor | OptimizedBatchProcessor;
   private fileHashCache: FileHashCache;
+  private useOptimizations: boolean;
 
   private state: IndexerState = {
     isRunning: false,
@@ -69,18 +73,37 @@ export class Indexer {
   constructor(private config: IndexerConfig) {
     this.queue = new IndexingQueue();
     this.fileHashCache = new FileHashCache();
+    this.useOptimizations = config.useOptimizations ?? true; // Default to enabled
 
-    this.processor = new BatchProcessor(
-      config.parser,
-      config.embedder,
-      config.storage,
-      {
-        basePath: config.basePath,
-        collectionName: config.collectionName,
-        concurrency: config.options?.concurrency,
-        batchSize: config.options?.batchSize,
-      }
-    );
+    // Use optimized processor if enabled
+    if (this.useOptimizations) {
+      logger.info('Using optimized batch processor with cross-file batching');
+      this.processor = new OptimizedBatchProcessor(
+        config.parser,
+        config.embedder,
+        config.storage,
+        {
+          basePath: config.basePath,
+          collectionName: config.collectionName,
+          concurrency: config.options?.concurrency,
+          batchSize: config.options?.batchSize,
+          crossFileBatchSize: 200, // Batch up to 200 blocks across files
+        }
+      );
+    } else {
+      logger.info('Using standard batch processor');
+      this.processor = new BatchProcessor(
+        config.parser,
+        config.embedder,
+        config.storage,
+        {
+          basePath: config.basePath,
+          collectionName: config.collectionName,
+          concurrency: config.options?.concurrency,
+          batchSize: config.options?.batchSize,
+        }
+      );
+    }
   }
 
   /**
@@ -167,7 +190,7 @@ export class Indexer {
    */
   private async processQueue(): Promise<void> {
     while (this.queue.size() > 0) {
-      const tasks = this.queue.nextBatch(this.config.options?.batchSize || 50);
+      const tasks = this.queue.nextBatch(this.config.options?.batchSize || 20);
 
       if (tasks.length === 0) {
         break;
@@ -210,6 +233,9 @@ export class Indexer {
       logger.info(
         `Progress: ${this.state.progress.filesProcessed}/${this.state.progress.filesTotal} (${this.state.progress.percentage.toFixed(1)}%)`
       );
+
+      // Allow brief pause between batches for memory cleanup
+      await new Promise((resolve) => setTimeout(resolve, 50));
     }
   }
 
@@ -217,6 +243,20 @@ export class Indexer {
    * Discover all files in the codebase
    */
   private async discoverFiles(): Promise<string[]> {
+    if (this.useOptimizations) {
+      // Use parallel discovery for faster scanning
+      const discovery = new ParallelFileDiscovery({
+        basePath: this.config.basePath,
+        maxConcurrentDirs: 10,
+      });
+
+      const files = await discovery.discover();
+
+      // Convert to relative paths
+      return files.map((f) => relative(this.config.basePath, f));
+    }
+
+    // Fallback to sequential discovery
     const files: string[] = [];
 
     async function walk(dir: string): Promise<void> {
@@ -256,8 +296,12 @@ export class Indexer {
       const fullPath = join(this.config.basePath, file);
 
       try {
-        const content = await fs.readFile(fullPath, 'utf-8');
-        if (this.fileHashCache.hasChanged(fullPath, content)) {
+        // Use file stats instead of reading entire content
+        const stats = await fs.stat(fullPath);
+        const statsKey = `${fullPath}:${stats.mtime.getTime()}:${stats.size}`;
+
+        // Check if we've seen this exact file state before
+        if (this.fileHashCache.hasChanged(fullPath, statsKey)) {
           changed.push(file);
         }
       } catch (_error) {

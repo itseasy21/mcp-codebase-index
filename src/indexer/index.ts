@@ -167,7 +167,7 @@ export class Indexer {
    */
   private async processQueue(): Promise<void> {
     while (this.queue.size() > 0) {
-      const tasks = this.queue.nextBatch(this.config.options?.batchSize || 50);
+      const tasks = this.queue.nextBatch(this.config.options?.batchSize || 20);
 
       if (tasks.length === 0) {
         break;
@@ -210,6 +210,9 @@ export class Indexer {
       logger.info(
         `Progress: ${this.state.progress.filesProcessed}/${this.state.progress.filesTotal} (${this.state.progress.percentage.toFixed(1)}%)`
       );
+
+      // Allow brief pause between batches for memory cleanup
+      await new Promise((resolve) => setTimeout(resolve, 50));
     }
   }
 
@@ -256,8 +259,12 @@ export class Indexer {
       const fullPath = join(this.config.basePath, file);
 
       try {
-        const content = await fs.readFile(fullPath, 'utf-8');
-        if (this.fileHashCache.hasChanged(fullPath, content)) {
+        // Use file stats instead of reading entire content
+        const stats = await fs.stat(fullPath);
+        const statsKey = `${fullPath}:${stats.mtime.getTime()}:${stats.size}`;
+
+        // Check if we've seen this exact file state before
+        if (this.fileHashCache.hasChanged(fullPath, statsKey)) {
           changed.push(file);
         }
       } catch (_error) {

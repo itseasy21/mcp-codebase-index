@@ -44,8 +44,9 @@ export class BatchProcessor {
     private storage: Storage,
     private options: BatchProcessorOptions
   ) {
-    this.concurrency = options.concurrency || 5;
-    this.batchSize = options.batchSize || 50;
+    // Lower defaults for better memory management
+    this.concurrency = options.concurrency || 3;
+    this.batchSize = options.batchSize || 20;
   }
 
   /**
@@ -112,12 +113,17 @@ export class BatchProcessor {
       await this.storage.vectors.upsertBatch(this.options.collectionName, points);
 
       const duration = Date.now() - startTime;
-      logger.info(`Indexed ${file}: ${points.length} blocks in ${duration}ms`);
+      const blocksIndexed = points.length;
+      logger.info(`Indexed ${file}: ${blocksIndexed} blocks in ${duration}ms`);
+
+      // Clear large objects to help garbage collection
+      texts.length = 0;
+      points.length = 0;
 
       return {
         file,
         success: true,
-        blocksIndexed: points.length,
+        blocksIndexed,
         duration,
       };
     } catch (error) {
@@ -144,46 +150,51 @@ export class BatchProcessor {
 
     logger.info(`Processing batch of ${files.length} files (concurrency: ${this.concurrency})`);
 
-    // Process files with concurrency limit
-    const processing: Promise<FileIndexingResult>[] = [];
+    // Process files with proper concurrency control using a pool
+    let fileIndex = 0;
 
-    for (const file of files) {
-      // Wait if we've hit concurrency limit
-      if (this.activeProcessing >= this.concurrency) {
-        const result = await Promise.race(processing);
-        results.push(result);
-
-        // Remove completed promise
-        const index = processing.findIndex((p) => p === Promise.resolve(result));
-        if (index !== -1) {
-          processing.splice(index, 1);
-        }
-
-        this.activeProcessing--;
-
-        if (!result.success && result.error) {
-          errors.push({ file: result.file, error: result.error });
-        }
+    const processNext = async (): Promise<FileIndexingResult | null> => {
+      if (fileIndex >= files.length) {
+        return null;
       }
 
-      // Start processing file
-      this.activeProcessing++;
-      const promise = this.processFile(file);
-      processing.push(promise);
-    }
+      const file = files[fileIndex++];
+      const result = await this.processFile(file);
 
-    // Wait for remaining files
-    const remainingResults = await Promise.all(processing);
-    results.push(...remainingResults);
-
-    this.activeProcessing = 0;
-
-    // Collect errors from remaining results
-    for (const result of remainingResults) {
       if (!result.success && result.error) {
         errors.push({ file: result.file, error: result.error });
       }
+
+      return result;
+    };
+
+    // Create worker pool with concurrency limit
+    const workers = Array(Math.min(this.concurrency, files.length))
+      .fill(null)
+      .map(async () => {
+        const workerResults: FileIndexingResult[] = [];
+        let result = await processNext();
+
+        while (result !== null) {
+          workerResults.push(result);
+          // Allow garbage collection between files
+          result = null;
+          result = await processNext();
+        }
+
+        return workerResults;
+      });
+
+    // Wait for all workers to complete
+    const workerResults = await Promise.all(workers);
+
+    // Flatten results
+    for (const workerResult of workerResults) {
+      results.push(...workerResult);
     }
+
+    // Clear references for garbage collection
+    workerResults.length = 0;
 
     const duration = Date.now() - startTime;
     const successfulFiles = results.filter((r) => r.success).length;
@@ -219,6 +230,16 @@ export class BatchProcessor {
 
       const result = await this.processBatch(chunk);
       allResults.push(result);
+
+      // Allow garbage collection between chunks
+      if (i + this.batchSize < files.length) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        // Suggest garbage collection if available (only works with --expose-gc flag)
+        if (global.gc) {
+          global.gc();
+        }
+      }
     }
 
     // Aggregate results

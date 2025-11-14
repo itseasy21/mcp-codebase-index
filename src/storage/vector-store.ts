@@ -101,12 +101,47 @@ export class VectorStore {
       const message = error instanceof Error ? error.message : String(error);
       const duration = Date.now() - startTime;
 
-      // Log detailed error information
+      // Log comprehensive error information for debugging
       logger.error(`Failed to upsert batch: ${message}`);
-      if (error instanceof Error && (error as any).response) {
-        logger.error(`Qdrant response:`, (error as any).response);
+
+      // Log error object structure
+      if (error instanceof Error) {
+        logger.error(`Error stack:`, error.stack);
+        const errorObj = error as any;
+
+        // Check for HTTP response data
+        if (errorObj.response) {
+          logger.error(`HTTP Response:`, {
+            status: errorObj.response.status,
+            statusText: errorObj.response.statusText,
+            data: errorObj.response.data,
+          });
+        }
+
+        // Check for Qdrant-specific error properties
+        if (errorObj.status) {
+          logger.error(`Qdrant Status:`, errorObj.status);
+        }
+        if (errorObj.data) {
+          logger.error(`Qdrant Data:`, errorObj.data);
+        }
       }
-      logger.debug(`First point structure:`, points[0]);
+
+      // Log sample point structure for debugging
+      if (points.length > 0) {
+        const samplePoint = points[0];
+        logger.error(`Sample point structure:`, {
+          id: samplePoint.id,
+          idType: typeof samplePoint.id,
+          vectorLength: samplePoint.vector.length,
+          vectorSample: samplePoint.vector.slice(0, 3),
+          payloadKeys: Object.keys(samplePoint.payload || {}),
+          payloadTypes: Object.entries(samplePoint.payload || {}).reduce((acc, [key, val]) => {
+            acc[key] = typeof val;
+            return acc;
+          }, {} as Record<string, string>),
+        });
+      }
 
       return {
         status: 'failed',

@@ -16,13 +16,13 @@ A powerful Model Context Protocol (MCP) server that enables AI assistants to sea
 ## Installation
 
 ```bash
-npm install -g @itseasy21/mcp-codebase-index
+npm install -g mcp-codebase-index
 ```
 
 Or use with npx (no installation required):
 
 ```bash
-npx @itseasy21/mcp-codebase-index
+npx mcp-codebase-index
 ```
 
 ## Quick Start
@@ -73,7 +73,7 @@ Add this to your Claude Desktop config file:
   "mcpServers": {
     "codebase-index": {
       "command": "npx",
-      "args": ["-y", "@itseasy21/mcp-codebase-index"],
+      "args": ["-y", "mcp-codebase-index"],
       "env": {
         "CODEBASE_PATH": "/absolute/path/to/your/repository",
         "EMBEDDING_PROVIDER": "gemini",
@@ -91,7 +91,7 @@ Add this to your Claude Desktop config file:
   "mcpServers": {
     "codebase-index": {
       "command": "npx",
-      "args": ["-y", "@itseasy21/mcp-codebase-index"],
+      "args": ["-y", "mcp-codebase-index"],
       "env": {
         "CODEBASE_PATH": "/absolute/path/to/your/repository",
         "EMBEDDING_PROVIDER": "gemini",
@@ -121,7 +121,7 @@ Restart Claude Desktop after saving the configuration.
   "claude-code.mcpServers": {
     "codebase-index": {
       "command": "npx",
-      "args": ["-y", "@itseasy21/mcp-codebase-index"],
+      "args": ["-y", "mcp-codebase-index"],
       "env": {
         "CODEBASE_PATH": "/absolute/path/to/your/repository",
         "EMBEDDING_PROVIDER": "gemini",
@@ -157,7 +157,7 @@ Cursor supports MCP servers through its AI settings:
   "mcpServers": {
     "codebase-index": {
       "command": "npx",
-      "args": ["-y", "@itseasy21/mcp-codebase-index"],
+      "args": ["-y", "mcp-codebase-index"],
       "env": {
         "CODEBASE_PATH": "/absolute/path/to/your/repository",
         "EMBEDDING_PROVIDER": "gemini",
@@ -191,7 +191,7 @@ If you're using the [Continue](https://continue.dev/) extension:
       {
         "name": "codebase-index",
         "command": "npx",
-        "args": ["-y", "@itseasy21/mcp-codebase-index"],
+        "args": ["-y", "mcp-codebase-index"],
         "env": {
           "CODEBASE_PATH": "/absolute/path/to/your/repository",
           "EMBEDDING_PROVIDER": "gemini",
@@ -226,7 +226,7 @@ Windsurf supports MCP servers natively:
   "mcpServers": {
     "codebase-index": {
       "command": "npx",
-      "args": ["-y", "@itseasy21/mcp-codebase-index"],
+      "args": ["-y", "mcp-codebase-index"],
       "env": {
         "CODEBASE_PATH": "/absolute/path/to/your/repository",
         "EMBEDDING_PROVIDER": "gemini",
@@ -256,7 +256,7 @@ Zed has experimental MCP support:
     "mcp_servers": {
       "codebase-index": {
         "command": "npx",
-        "args": ["-y", "@itseasy21/mcp-codebase-index"],
+        "args": ["-y", "mcp-codebase-index"],
         "env": {
           "CODEBASE_PATH": "/absolute/path/to/your/repository",
           "EMBEDDING_PROVIDER": "gemini",
@@ -283,7 +283,7 @@ For any MCP-compatible client, use this standard configuration:
   "mcpServers": {
     "codebase-index": {
       "command": "npx",
-      "args": ["-y", "@itseasy21/mcp-codebase-index"],
+      "args": ["-y", "mcp-codebase-index"],
       "env": {
         "CODEBASE_PATH": "/absolute/path/to/your/repository",
         "EMBEDDING_PROVIDER": "gemini",
@@ -412,7 +412,7 @@ Unsupported languages fall back to intelligent text chunking.
 
 ### "Cannot find module" errors
 ```bash
-npm install -g @itseasy21/mcp-codebase-index
+npm install -g mcp-codebase-index
 ```
 
 ### Indexing is slow

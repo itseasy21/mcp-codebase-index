@@ -36,7 +36,6 @@ export interface BatchProcessorOptions {
 export class BatchProcessor {
   private concurrency: number;
   private batchSize: number;
-  private activeProcessing = 0;
 
   constructor(
     private parser: CodeParser,

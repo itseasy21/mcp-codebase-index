@@ -29,7 +29,7 @@ export class OptimizedBatchProcessor {
 
   constructor(
     private parser: CodeParser,
-    private embedder: EmbeddingProvider,
+    embedder: EmbeddingProvider,
     private storage: Storage,
     private options: OptimizedBatchProcessorOptions
   ) {

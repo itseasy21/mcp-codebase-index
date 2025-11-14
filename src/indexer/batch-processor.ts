@@ -12,6 +12,17 @@ import { logger } from '../utils/logger.js';
 import { IndexingError } from '../utils/errors.js';
 import { hashContent } from '../utils/file-utils.js';
 
+/**
+ * Convert a SHA256 hash to UUID format
+ * Takes first 32 hex chars (128 bits) and formats as UUID (8-4-4-4-12)
+ */
+function hashToUUID(hash: string): string {
+  // Take first 32 characters (128 bits)
+  const hex = hash.substring(0, 32);
+  // Format as UUID: 8-4-4-4-12
+  return `${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20, 32)}`;
+}
+
 export interface BatchProcessorOptions {
   basePath: string;
   collectionName: string;
@@ -73,12 +84,14 @@ export class BatchProcessor {
       });
       const embeddingResult = await this.embedder.embedBatch(texts);
 
-      // Create points for Qdrant with sanitized IDs
+      // Create points for Qdrant with UUID-formatted IDs
       const points: Point[] = parseResult.blocks.map((block, index) => {
-        // Create a safe point ID using hash to avoid special characters
-        const idHash = hashContent(`${block.file}:${block.line}:${block.endLine}`);
+        // Create a unique point ID by hashing file location and converting to UUID format
+        const locationHash = hashContent(`${block.file}:${block.line}:${block.endLine}`);
+        const pointId = hashToUUID(locationHash);
+
         return {
-          id: idHash,
+          id: pointId,
           vector: embeddingResult.embeddings[index].values,
           payload: {
             file: block.file,

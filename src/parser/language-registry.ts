@@ -95,6 +95,18 @@ export class LanguageRegistry {
         hasGrammar: true,
       },
       {
+        name: 'kotlin',
+        extensions: ['.kt', '.kts'],
+        treeSitterName: 'kotlin',
+        hasGrammar: true,
+      },
+      {
+        name: 'swift',
+        extensions: ['.swift'],
+        treeSitterName: 'swift',
+        hasGrammar: true,
+      },
+      {
         name: 'markdown',
         extensions: ['.md', '.markdown'],
         aliases: ['md'],

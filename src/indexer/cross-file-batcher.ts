@@ -9,6 +9,9 @@ import type { Point } from '../storage/types.js';
 import type { CodeBlock } from '../types/models.js';
 import { logger } from '../utils/logger.js';
 import { hashContent } from '../utils/file-utils.js';
+import { decomposePathIntoSegments } from '../utils/path-utils.js';
+import { chunkQualityFilter } from './chunk-quality-filter.js';
+import { embeddingEnricher } from './embedding-enricher.js';
 
 interface BlockWithFile {
   block: CodeBlock;
@@ -36,6 +39,8 @@ export interface CrossFileBatcherConfig {
   collectionName: string;
   maxBlocksPerBatch: number; // Max blocks to embed in one API call
   maxPointsPerUpsert: number; // Max points to upsert at once
+  enableQualityFilter?: boolean; // Filter low-quality chunks (default: true)
+  enableEnrichment?: boolean; // Enrich embeddings with metadata (default: true)
 }
 
 /**
@@ -45,24 +50,52 @@ export interface CrossFileBatcherConfig {
 export class CrossFileBatcher {
   private pendingBlocks: BlockWithFile[] = [];
   private config: CrossFileBatcherConfig;
+  private stats = {
+    totalBlocks: 0,
+    filteredBlocks: 0,
+    enrichedBlocks: 0,
+  };
 
   constructor(config: CrossFileBatcherConfig) {
-    this.config = config;
+    this.config = {
+      ...config,
+      enableQualityFilter: config.enableQualityFilter ?? true,
+      enableEnrichment: config.enableEnrichment ?? true,
+    };
+
+    logger.info(`Cross-file batcher initialized with quality filter: ${this.config.enableQualityFilter}, enrichment: ${this.config.enableEnrichment}`);
   }
 
   /**
    * Add blocks from a file to the pending batch
+   * Filters out low-quality chunks if enabled
    */
   addBlocks(file: string, blocks: CodeBlock[]): void {
+    this.stats.totalBlocks += blocks.length;
+
+    let addedCount = 0;
+
     blocks.forEach((block, index) => {
+      // Apply quality filter if enabled
+      if (this.config.enableQualityFilter) {
+        if (!chunkQualityFilter.isHighQuality(block)) {
+          this.stats.filteredBlocks++;
+          logger.debug(`Filtered low-quality chunk: ${file}:${block.line} (${block.name})`);
+          return; // Skip this block
+        }
+      }
+
       this.pendingBlocks.push({
         block,
         file,
         blockIndex: index,
       });
+      addedCount++;
     });
 
-    logger.debug(`Added ${blocks.length} blocks from ${file} to batch (total: ${this.pendingBlocks.length})`);
+    logger.debug(
+      `Added ${addedCount}/${blocks.length} blocks from ${file} to batch (total: ${this.pendingBlocks.length}, filtered: ${blocks.length - addedCount})`
+    );
   }
 
   /**
@@ -98,13 +131,24 @@ export class CrossFileBatcher {
     logger.info(`Flushing cross-file batch: ${blockCount} blocks from ${files.size} files`);
 
     try {
-      // Step 1: Prepare texts for embedding
+      // Step 1: Prepare texts for embedding (with enrichment if enabled)
       const MAX_CHARS_PER_BLOCK = 8000;
       const texts = this.pendingBlocks.map(({ block }) => {
-        if (block.code.length > MAX_CHARS_PER_BLOCK) {
-          return block.code.substring(0, MAX_CHARS_PER_BLOCK) + '\n// ... (truncated)';
+        let text: string;
+
+        // Use enriched text if enabled, otherwise raw code
+        if (this.config.enableEnrichment) {
+          text = embeddingEnricher.enrich(block, { format: 'structured' });
+          this.stats.enrichedBlocks++;
+        } else {
+          text = block.code;
         }
-        return block.code;
+
+        // Truncate if too long
+        if (text.length > MAX_CHARS_PER_BLOCK) {
+          return text.substring(0, MAX_CHARS_PER_BLOCK) + '\n// ... (truncated)';
+        }
+        return text;
       });
 
       // Step 2: Batch embed all texts in a single API call
@@ -114,6 +158,9 @@ export class CrossFileBatcher {
       const points: Point[] = this.pendingBlocks.map(({ block }, index) => {
         const locationHash = hashContent(`${block.file}:${block.line}:${block.endLine}`);
         const pointId = hashToUUID(locationHash);
+
+        // Decompose file path into indexed segments for efficient directory filtering
+        const pathSegments = decomposePathIntoSegments(block.file);
 
         return {
           id: pointId,
@@ -126,6 +173,7 @@ export class CrossFileBatcher {
             type: block.type,
             name: block.name,
             language: block.language,
+            pathSegments, // Add path segments for directory-based filtering
             metadata: block.metadata || {},
             hash: hashContent(block.code),
             indexed_at: new Date().toISOString(),
@@ -147,7 +195,15 @@ export class CrossFileBatcher {
       this.pendingBlocks.length = 0;
 
       const duration = Date.now() - startTime;
-      logger.info(`Cross-file batch complete: ${blockCount} blocks in ${duration}ms (${(blockCount / (duration / 1000)).toFixed(0)} blocks/sec)`);
+      const filterRate = this.stats.totalBlocks > 0
+        ? ((this.stats.filteredBlocks / this.stats.totalBlocks) * 100).toFixed(1)
+        : '0';
+
+      logger.info(
+        `Cross-file batch complete: ${blockCount} blocks in ${duration}ms ` +
+        `(${(blockCount / (duration / 1000)).toFixed(0)} blocks/sec, ` +
+        `${filterRate}% filtered, enrichment: ${this.config.enableEnrichment})`
+      );
 
       return {
         totalBlocks: blockCount,
@@ -173,13 +229,19 @@ export class CrossFileBatcher {
   }
 
   /**
-   * Get statistics about pending batch
+   * Get statistics about pending batch and filtering
    */
   getStats() {
     const files = new Set(this.pendingBlocks.map(b => b.file));
     return {
       pendingBlocks: this.pendingBlocks.length,
       pendingFiles: files.size,
+      totalProcessed: this.stats.totalBlocks,
+      filteredBlocks: this.stats.filteredBlocks,
+      enrichedBlocks: this.stats.enrichedBlocks,
+      filterRate: this.stats.totalBlocks > 0
+        ? (this.stats.filteredBlocks / this.stats.totalBlocks) * 100
+        : 0,
     };
   }
 }

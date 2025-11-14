@@ -25,6 +25,7 @@ interface CodebaseSearchArgs {
   threshold?: number;
   fileTypes?: string[];
   paths?: string[];
+  directoryPrefix?: string; // NEW: Filter by directory (e.g., "src/components")
   languages?: string[];
   includeContext?: boolean;
   contextLines?: number;
@@ -140,6 +141,10 @@ function registerToolHandlers(server: Server, orchestrator: Orchestrator): void 
               type: 'array',
               items: { type: 'string' },
               description: 'Filter by file paths',
+            },
+            directoryPrefix: {
+              type: 'string',
+              description: 'Filter by directory prefix (e.g., "src/components" for all files in that directory)',
             },
             includeContext: {
               type: 'boolean',
@@ -342,6 +347,7 @@ async function handleCodebaseSearch(orchestrator: Orchestrator, args: CodebaseSe
     threshold: args.threshold || 0.7,
     fileTypes: args.fileTypes,
     paths: args.paths,
+    directoryPrefix: args.directoryPrefix, // NEW: Directory-based filtering
     languages: args.languages,
     includeContext: args.includeContext ?? true,
     contextLines: args.contextLines || 3,
@@ -353,13 +359,23 @@ async function handleCodebaseSearch(orchestrator: Orchestrator, args: CodebaseSe
       `**${result.file}:${result.line}** (score: ${result.score.toFixed(3)})`,
       `Type: ${result.type}${result.name ? ` | Name: ${result.name}` : ''}`,
       '',
-      '```' + (result.language || ''),
-      result.code,
-      '```',
     ];
 
+    // Prefer showing context over raw code for better readability
+    // Context shows the code chunk within surrounding file lines
     if (result.context) {
-      lines.push('', '**Context:**', '```' + (result.language || ''), result.context, '```');
+      lines.push(
+        '```' + (result.language || ''),
+        result.context,
+        '```'
+      );
+    } else {
+      // Fallback to raw code if context not available
+      lines.push(
+        '```' + (result.language || ''),
+        result.code,
+        '```'
+      );
     }
 
     if (result.relevanceFactors) {
@@ -375,15 +391,31 @@ async function handleCodebaseSearch(orchestrator: Orchestrator, args: CodebaseSe
     return lines.join('\n');
   });
 
+  // Check if any results contain exact matches
+  const hasExactMatches = response.results.some(r =>
+    r.relevanceFactors?.exactMatch ||
+    r.code?.toLowerCase().includes(response.query.toLowerCase()) ||
+    r.context?.toLowerCase().includes(response.query.toLowerCase())
+  );
+
   const summary = [
     `# Search Results for: "${response.query}"`,
     '',
     `Found ${response.stats.totalResults} results in ${response.stats.queryTime}ms`,
     `(Search: ${response.stats.searchTime}ms, Ranking: ${response.stats.rankingTime}ms)`,
     '',
-    '---',
-    '',
   ];
+
+  // Warn if no exact matches found
+  if (!hasExactMatches && response.results.length > 0) {
+    summary.push(
+      '⚠️  **Note:** No exact text matches found. Results below are based on semantic similarity only.',
+      'Consider: (1) Reindexing if files have changed, (2) Using simpler search terms, (3) Checking if the code exists in your codebase.',
+      ''
+    );
+  }
+
+  summary.push('---', '');
 
   const text = [...summary, ...formattedResults].join('\n');
 

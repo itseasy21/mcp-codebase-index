@@ -29,9 +29,16 @@ export class CollectionManager {
             vectors: {
               size: config.vectorSize,
               distance: config.distance as any,
+              on_disk: true, // Store vectors on disk for large collections
+            } as any,
+            // HNSW configuration for optimal search performance
+            hnsw_config: {
+              m: 64, // Number of edges per node (higher = better recall, more memory)
+              ef_construct: 512, // Construction time search width (higher = better index quality)
+              on_disk: true, // Store HNSW graph on disk
             } as any,
             optimizers_config: config.optimizerConfig,
-            on_disk_payload: config.onDiskPayload,
+            on_disk_payload: config.onDiskPayload ?? true,
           });
         },
         {
@@ -41,11 +48,52 @@ export class CollectionManager {
       );
 
       logger.info(`Collection created successfully: ${config.name}`);
+
+      // Create payload indexes for frequently filtered fields
+      await this.createPayloadIndexes(config.name);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error(`Failed to create collection ${config.name}: ${message}`);
       throw new StorageError(`Failed to create collection: ${message}`);
     }
+  }
+
+  /**
+   * Create payload indexes for efficient filtering
+   * Indexes enable O(1) lookup on type, language, and path segments
+   */
+  private async createPayloadIndexes(collectionName: string): Promise<void> {
+    const qdrantClient = this.client.getClient();
+
+    // Indexes to create:
+    // 1. type field (for excluding metadata points)
+    // 2. pathSegments.0 through pathSegments.7 (for directory prefix filtering)
+    const indexes = [
+      { field: 'type', type: 'keyword' },
+      { field: 'language', type: 'keyword' },
+      ...Array.from({ length: 8 }, (_, i) => ({
+        field: `pathSegments.${i}`,
+        type: 'keyword',
+      })),
+    ];
+
+    for (const index of indexes) {
+      try {
+        await qdrantClient.createPayloadIndex(collectionName, {
+          field_name: index.field,
+          field_schema: index.type as any,
+        });
+        logger.debug(`Created payload index: ${index.field}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        // Ignore "already exists" errors
+        if (!message.includes('already exists') && !message.includes('Already exists')) {
+          logger.warn(`Failed to create payload index ${index.field}: ${message}`);
+        }
+      }
+    }
+
+    logger.info(`Payload indexes created for collection: ${collectionName}`);
   }
 
   /**

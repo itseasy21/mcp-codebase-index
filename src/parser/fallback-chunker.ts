@@ -9,6 +9,7 @@ export interface ChunkerOptions {
   chunkSize?: number;
   chunkOverlap?: number;
   minChunkSize?: number;
+  allowTinyLastChunk?: boolean; // Whether to keep very small last chunks (default: false)
 }
 
 /**
@@ -60,8 +61,26 @@ export class FallbackChunker {
       const chunkLines = lines.slice(startLine, endLine);
       const chunkContent = chunkLines.join('\n');
 
-      // Skip empty or very small chunks
-      if (chunkLines.length >= minSize || endLine === lines.length) {
+      // Determine if we should keep this chunk
+      const isLastChunk = endLine === lines.length;
+      const isTooSmall = chunkLines.length < minSize;
+      const allowTiny = options.allowTinyLastChunk ?? false;
+
+      // Skip chunks that are:
+      // - Too small AND not the last chunk, OR
+      // - Too small AND last chunk AND we don't allow tiny last chunks
+      if (isTooSmall && (!isLastChunk || !allowTiny)) {
+        // For last chunks that are too small, merge with previous if possible
+        if (isLastChunk && blocks.length > 0 && !allowTiny) {
+          const lastBlock = blocks[blocks.length - 1];
+          lastBlock.code += '\n' + chunkContent;
+          lastBlock.endLine = endLine;
+          lastBlock.hash = hashContent(lastBlock.code);
+          lastBlock.name = `Chunk ${chunkIndex} (lines ${lastBlock.line}-${endLine})`;
+        }
+        // Otherwise just skip this chunk
+      } else if (chunkContent.trim()) {
+        // Only add non-empty chunks
         blocks.push({
           id: `${filePath}:${startLine + 1}`,
           file: filePath,
@@ -139,7 +158,20 @@ export class FallbackChunker {
       const chunkLines = lines.slice(startLine, endLine);
       const chunkContent = chunkLines.join('\n');
 
-      if (chunkContent.trim()) {
+      const minSize = options.minChunkSize ?? this.minChunkSize;
+      const isLastChunk = startLine >= lines.length - 1;
+      const isTooSmall = chunkLines.length < minSize;
+      const allowTiny = options.allowTinyLastChunk ?? false;
+
+      // Handle tiny last chunks by merging with previous
+      if (isTooSmall && isLastChunk && blocks.length > 0 && !allowTiny) {
+        const lastBlock = blocks[blocks.length - 1];
+        lastBlock.code += '\n' + chunkContent;
+        lastBlock.endLine = endLine;
+        lastBlock.hash = hashContent(lastBlock.code);
+        lastBlock.name = `Section ${chunkIndex} (lines ${lastBlock.line}-${endLine})`;
+      } else if (chunkContent.trim() && (!isTooSmall || allowTiny)) {
+        // Only add non-empty chunks that meet minimum size
         blocks.push({
           id: `${filePath}:${startLine + 1}`,
           file: filePath,

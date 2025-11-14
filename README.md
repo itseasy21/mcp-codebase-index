@@ -53,12 +53,18 @@ Choose one option:
 - Install [Ollama](https://ollama.ai/)
 - Pull a model: `ollama pull nomic-embed-text`
 
-### 3. Configure Claude Desktop
+### 3. Configure Your IDE/Editor
+
+Choose your IDE or editor and follow the setup instructions:
+
+<details>
+<summary><b>Claude Desktop</b></summary>
 
 Add this to your Claude Desktop config file:
 
 **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 **Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
+**Linux**: `~/.config/Claude/claude_desktop_config.json`
 
 ```json
 {
@@ -77,7 +83,7 @@ Add this to your Claude Desktop config file:
 }
 ```
 
-**For Qdrant Cloud**, use:
+**For Qdrant Cloud:**
 ```json
 {
   "mcpServers": {
@@ -96,9 +102,204 @@ Add this to your Claude Desktop config file:
 }
 ```
 
-### 4. Restart Claude Desktop
+Restart Claude Desktop after saving the configuration.
 
-The server will automatically start indexing your codebase on first run.
+</details>
+
+<details>
+<summary><b>Claude Code (VS Code Extension)</b></summary>
+
+1. Open VS Code Settings (Cmd/Ctrl + ,)
+2. Search for "Claude Code: MCP Servers"
+3. Click "Edit in settings.json"
+4. Add this configuration:
+
+```json
+{
+  "claude-code.mcpServers": {
+    "codebase-index": {
+      "command": "npx",
+      "args": ["-y", "@itseasy21/mcp-codebase-index"],
+      "env": {
+        "CODEBASE_PATH": "/absolute/path/to/your/repository",
+        "EMBEDDING_PROVIDER": "gemini",
+        "GEMINI_API_KEY": "your-api-key-here",
+        "QDRANT_URL": "http://localhost:6333"
+      }
+    }
+  }
+}
+```
+
+Reload VS Code after saving.
+
+</details>
+
+<details>
+<summary><b>Cursor</b></summary>
+
+Cursor supports MCP servers through its AI settings:
+
+1. Open Cursor Settings (Cmd/Ctrl + ,)
+2. Navigate to "Features" → "AI"
+3. Scroll to "Model Context Protocol"
+4. Click "Edit Config" or locate the config file:
+   - **macOS**: `~/Library/Application Support/Cursor/User/globalStorage/mcp.json`
+   - **Windows**: `%APPDATA%/Cursor/User/globalStorage/mcp.json`
+   - **Linux**: `~/.config/Cursor/User/globalStorage/mcp.json`
+
+5. Add this configuration:
+
+```json
+{
+  "mcpServers": {
+    "codebase-index": {
+      "command": "npx",
+      "args": ["-y", "@itseasy21/mcp-codebase-index"],
+      "env": {
+        "CODEBASE_PATH": "/absolute/path/to/your/repository",
+        "EMBEDDING_PROVIDER": "gemini",
+        "GEMINI_API_KEY": "your-api-key-here",
+        "QDRANT_URL": "http://localhost:6333"
+      }
+    }
+  }
+}
+```
+
+Restart Cursor after saving.
+
+</details>
+
+<details>
+<summary><b>VS Code with Continue Extension</b></summary>
+
+If you're using the [Continue](https://continue.dev/) extension:
+
+1. Open the Continue configuration file:
+   - **macOS/Linux**: `~/.continue/config.json`
+   - **Windows**: `%USERPROFILE%\.continue\config.json`
+
+2. Add to the `experimental.modelContextProtocolServers` section:
+
+```json
+{
+  "experimental": {
+    "modelContextProtocolServers": [
+      {
+        "name": "codebase-index",
+        "command": "npx",
+        "args": ["-y", "@itseasy21/mcp-codebase-index"],
+        "env": {
+          "CODEBASE_PATH": "/absolute/path/to/your/repository",
+          "EMBEDDING_PROVIDER": "gemini",
+          "GEMINI_API_KEY": "your-api-key-here",
+          "QDRANT_URL": "http://localhost:6333"
+        }
+      }
+    ]
+  }
+}
+```
+
+Reload VS Code after saving.
+
+</details>
+
+<details>
+<summary><b>Windsurf Editor</b></summary>
+
+Windsurf supports MCP servers natively:
+
+1. Open Windsurf Settings
+2. Navigate to MCP Settings or locate the config file:
+   - **macOS**: `~/Library/Application Support/Windsurf/mcp_config.json`
+   - **Windows**: `%APPDATA%/Windsurf/mcp_config.json`
+   - **Linux**: `~/.config/Windsurf/mcp_config.json`
+
+3. Add this configuration:
+
+```json
+{
+  "mcpServers": {
+    "codebase-index": {
+      "command": "npx",
+      "args": ["-y", "@itseasy21/mcp-codebase-index"],
+      "env": {
+        "CODEBASE_PATH": "/absolute/path/to/your/repository",
+        "EMBEDDING_PROVIDER": "gemini",
+        "GEMINI_API_KEY": "your-api-key-here",
+        "QDRANT_URL": "http://localhost:6333"
+      }
+    }
+  }
+}
+```
+
+Restart Windsurf after saving.
+
+</details>
+
+<details>
+<summary><b>Zed Editor</b></summary>
+
+Zed has experimental MCP support:
+
+1. Open Zed Settings (Cmd/Ctrl + ,)
+2. Add to your settings.json:
+
+```json
+{
+  "experimental": {
+    "mcp_servers": {
+      "codebase-index": {
+        "command": "npx",
+        "args": ["-y", "@itseasy21/mcp-codebase-index"],
+        "env": {
+          "CODEBASE_PATH": "/absolute/path/to/your/repository",
+          "EMBEDDING_PROVIDER": "gemini",
+          "GEMINI_API_KEY": "your-api-key-here",
+          "QDRANT_URL": "http://localhost:6333"
+        }
+      }
+    }
+  }
+}
+```
+
+Restart Zed after saving.
+
+</details>
+
+<details>
+<summary><b>Other MCP-Compatible Clients</b></summary>
+
+For any MCP-compatible client, use this standard configuration:
+
+```json
+{
+  "mcpServers": {
+    "codebase-index": {
+      "command": "npx",
+      "args": ["-y", "@itseasy21/mcp-codebase-index"],
+      "env": {
+        "CODEBASE_PATH": "/absolute/path/to/your/repository",
+        "EMBEDDING_PROVIDER": "gemini",
+        "GEMINI_API_KEY": "your-api-key-here",
+        "QDRANT_URL": "http://localhost:6333"
+      }
+    }
+  }
+}
+```
+
+Consult your client's documentation for the exact config file location.
+
+</details>
+
+### 4. Restart Your IDE/Editor
+
+After saving the configuration, restart your IDE/editor. The server will automatically start indexing your codebase on first run.
 
 ## Usage
 

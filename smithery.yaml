@@ -1,0 +1,98 @@
+# Smithery configuration file: https://smithery.ai/docs/config#smitheryyaml
+
+startCommand:
+  type: stdio
+  configSchema:
+    # JSON Schema defining the configuration options for the MCP.
+    type: object
+    required:
+      - codebasePath
+      - embeddingProvider
+      - qdrantUrl
+    properties:
+      codebasePath:
+        type: string
+        description: Absolute path to your repository to index
+      embeddingProvider:
+        type: string
+        description: "Embedding provider to use: gemini, openai, or ollama"
+        enum:
+          - gemini
+          - openai
+          - ollama
+        default: gemini
+      qdrantUrl:
+        type: string
+        description: Qdrant instance URL (e.g., http://localhost:6333 or https://your-cluster.cloud.qdrant.io)
+        default: http://localhost:6333
+      geminiApiKey:
+        type: string
+        description: API key for Google Gemini (required if embeddingProvider is gemini)
+      openaiApiKey:
+        type: string
+        description: API key for OpenAI (required if embeddingProvider is openai)
+      openaiModel:
+        type: string
+        description: OpenAI model to use for embeddings (optional, defaults to text-embedding-3-small)
+        default: text-embedding-3-small
+      ollamaBaseUrl:
+        type: string
+        description: Ollama base URL (required if embeddingProvider is ollama)
+        default: http://localhost:11434
+      ollamaModel:
+        type: string
+        description: Ollama model to use for embeddings (optional, defaults to nomic-embed-text)
+        default: nomic-embed-text
+      qdrantApiKey:
+        type: string
+        description: API key for Qdrant Cloud (optional, required for cloud instances)
+      collectionName:
+        type: string
+        description: Name of the Qdrant collection (optional, defaults to codebase_index)
+        default: codebase_index
+      indexBatchSize:
+        type: number
+        description: Number of files to process in each batch (optional, defaults to 50)
+        default: 50
+      indexConcurrency:
+        type: number
+        description: Number of parallel indexing operations (optional, defaults to 5)
+        default: 5
+      logLevel:
+        type: string
+        description: "Logging level: debug, info, warn, error (optional, defaults to info)"
+        enum:
+          - debug
+          - info
+          - warn
+          - error
+        default: info
+
+  commandFunction:
+    # A JS function that produces the CLI command based on the given config to start the MCP on stdio.
+    |-
+      (config) => ({
+        command: 'npx',
+        args: ['-y', '@itseasy21/mcp-codebase-index'],
+        env: {
+          CODEBASE_PATH: config.codebasePath,
+          EMBEDDING_PROVIDER: config.embeddingProvider,
+          QDRANT_URL: config.qdrantUrl,
+          GEMINI_API_KEY: config.geminiApiKey,
+          OPENAI_API_KEY: config.openaiApiKey,
+          OPENAI_MODEL: config.openaiModel,
+          OLLAMA_BASE_URL: config.ollamaBaseUrl,
+          OLLAMA_MODEL: config.ollamaModel,
+          QDRANT_API_KEY: config.qdrantApiKey,
+          COLLECTION_NAME: config.collectionName,
+          INDEX_BATCH_SIZE: config.indexBatchSize?.toString(),
+          INDEX_CONCURRENCY: config.indexConcurrency?.toString(),
+          LOG_LEVEL: config.logLevel
+        }
+      })
+
+  exampleConfig:
+    codebasePath: /path/to/your/repository
+    embeddingProvider: gemini
+    qdrantUrl: http://localhost:6333
+    geminiApiKey: your-api-key-here

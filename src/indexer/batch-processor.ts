@@ -63,27 +63,37 @@ export class BatchProcessor {
 
       logger.debug(`Extracted ${parseResult.blocks.length} blocks from ${file}`);
 
-      // Generate embeddings for all blocks
-      const texts = parseResult.blocks.map((block) => block.code);
+      // Generate embeddings for all blocks with truncation for large code
+      const MAX_CHARS_PER_BLOCK = 8000; // ~8KB limit per block for safety
+      const texts = parseResult.blocks.map((block) => {
+        if (block.code.length > MAX_CHARS_PER_BLOCK) {
+          return block.code.substring(0, MAX_CHARS_PER_BLOCK) + '\n// ... (truncated)';
+        }
+        return block.code;
+      });
       const embeddingResult = await this.embedder.embedBatch(texts);
 
-      // Create points for Qdrant
-      const points: Point[] = parseResult.blocks.map((block, index) => ({
-        id: `${block.file}:${block.line}`,
-        vector: embeddingResult.embeddings[index].values,
-        payload: {
-          file: block.file,
-          line: block.line,
-          endLine: block.endLine,
-          code: block.code,
-          type: block.type,
-          name: block.name,
-          language: block.language,
-          metadata: block.metadata || {},
-          hash: hashContent(block.code),
-          indexed_at: new Date().toISOString(),
-        },
-      }));
+      // Create points for Qdrant with sanitized IDs
+      const points: Point[] = parseResult.blocks.map((block, index) => {
+        // Create a safe point ID using hash to avoid special characters
+        const idHash = hashContent(`${block.file}:${block.line}:${block.endLine}`);
+        return {
+          id: idHash,
+          vector: embeddingResult.embeddings[index].values,
+          payload: {
+            file: block.file,
+            line: block.line,
+            endLine: block.endLine,
+            code: block.code,
+            type: block.type,
+            name: block.name,
+            language: block.language,
+            metadata: block.metadata || {},
+            hash: hashContent(block.code),
+            indexed_at: new Date().toISOString(),
+          },
+        };
+      });
 
       // Store in Qdrant
       await this.storage.vectors.upsertBatch(this.options.collectionName, points);

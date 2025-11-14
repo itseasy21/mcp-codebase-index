@@ -101,7 +101,12 @@ export class VectorStore {
       const message = error instanceof Error ? error.message : String(error);
       const duration = Date.now() - startTime;
 
+      // Log detailed error information
       logger.error(`Failed to upsert batch: ${message}`);
+      if (error instanceof Error && (error as any).response) {
+        logger.error(`Qdrant response:`, (error as any).response);
+      }
+      logger.debug(`First point structure:`, points[0]);
 
       return {
         status: 'failed',

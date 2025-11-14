@@ -1,6 +1,6 @@
 {
   "name": "mcp-codebase-index",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "MCP server for semantic code search using Tree-sitter, embeddings, and Qdrant vector database",
   "type": "module",
   "main": "dist/index.js",

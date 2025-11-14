@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2
+
+### Patch Changes
+
+- 6f6db4b: Fix README package name from @itseasy21/mcp-codebase-index to mcp-codebase-index to match npm registry
+
 ## 0.2.1
 
 ### Patch Changes

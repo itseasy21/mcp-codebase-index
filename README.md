@@ -1,114 +1,75 @@
 # MCP Codebase Index
 
-A Model Context Protocol (MCP) server that provides semantic code search capabilities using Tree-sitter parsing, multiple embedding providers, and Qdrant vector database.
+A powerful Model Context Protocol (MCP) server that enables AI assistants to search and understand your codebase using semantic search. Find code using natural language queries like "authentication logic" or "database connection handling" instead of exact text matching.
 
 ## Features
 
-- **Semantic Code Search**: Find code using natural language queries
-- **Multi-Language Support**: TypeScript, JavaScript, Python, Java, Go, Rust, C/C++, C#, Ruby, PHP, and more
-- **Multiple Embedding Providers**: Google Gemini (free), OpenAI, Ollama (local), and OpenAI-compatible providers
-- **Flexible Vector Storage**: Qdrant Cloud (free tier) or self-hosted Docker
-- **Real-time Indexing**: Automatic file watching and incremental updates
-- **Git-Aware**: Detects branch switches and reindexes automatically
+- 🔍 **Semantic Code Search** - Search using natural language, not just keywords
+- 🌐 **Multi-Language Support** - TypeScript, JavaScript, Python, Java, Go, Rust, C/C++, C#, Ruby, PHP, and more
+- 🎯 **Smart Code Parsing** - Understands functions, classes, and code structure using Tree-sitter
+- 🔄 **Real-time Updates** - Automatically reindexes when files change or branches switch
+- 🚀 **Multiple Embedding Providers** - Use Google Gemini (free), OpenAI, or local Ollama models
+- ☁️ **Flexible Storage** - Works with Qdrant Cloud (free tier) or self-hosted instances
 
-## Status
+## Installation
 
-✅ **Phase 1-9 Complete** - Core functionality implemented and tested!
+```bash
+npm install -g @itseasy21/mcp-codebase-index
+```
 
-### Completed Phases
-- ✅ **Phase 1**: Foundation (Project structure, TypeScript, configuration)
-- ✅ **Phase 2**: Code Parser (Tree-sitter, language extractors, markdown parsing)
-- ✅ **Phase 3**: Embeddings (Gemini, OpenAI, Ollama providers)
-- ✅ **Phase 4**: Storage Layer (Qdrant integration, vector operations)
-- ✅ **Phase 5**: Indexing Engine (File watching, incremental updates, Git integration)
-- ✅ **Phase 6**: Search Implementation (Semantic search with ranking)
-- ✅ **Phase 7**: Status Management (Progress tracking, statistics)
-- ✅ **Phase 8**: MCP Tools Integration (All 6 tools fully functional)
-- ✅ **Phase 9**: Testing & Infrastructure (Vitest, unit tests, integration tests)
+Or use with npx (no installation required):
 
-### Ready to Use
-The server is fully functional and ready for production use! All MCP tools are implemented and tested.
+```bash
+npx @itseasy21/mcp-codebase-index
+```
 
 ## Quick Start
 
-### Prerequisites
+### 1. Set Up Qdrant Vector Database
 
-- Node.js 18+
-- npm or pnpm
-- Qdrant instance (Docker or Cloud)
-- API key for embedding provider (Gemini, OpenAI, or Ollama)
+Choose one option:
 
-### Installation
+**Option A: Qdrant Cloud (Recommended for beginners)**
+- Sign up for free at [Qdrant Cloud](https://cloud.qdrant.io/)
+- Create a cluster (free tier available)
+- Get your API URL and key
 
+**Option B: Local Docker**
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd mcp-codebase-index
-
-# Install dependencies
-npm install
-
-# Copy environment template
-cp .env.example .env
-
-# Edit .env with your configuration
-# Required: CODEBASE_PATH, EMBEDDING_PROVIDER, and provider API key
+docker run -p 6333:6333 qdrant/qdrant
 ```
 
-### Development
+### 2. Get an Embedding Provider API Key
 
-```bash
-# Build the project
-npm run build
+Choose one option:
 
-# Run in development mode
-npm run dev
+**Option A: Google Gemini (Free)**
+- Get a free API key at [Google AI Studio](https://makersuite.google.com/app/apikey)
 
-# Run tests
-npm test
+**Option B: OpenAI**
+- Get an API key at [OpenAI Platform](https://platform.openai.com/api-keys)
 
-# Type checking
-npm run typecheck
+**Option C: Ollama (Local, Free)**
+- Install [Ollama](https://ollama.ai/)
+- Pull a model: `ollama pull nomic-embed-text`
 
-# Lint code
-npm run lint
-npm run lint:fix
+### 3. Configure Claude Desktop
 
-# Format code
-npm run format
-```
+Add this to your Claude Desktop config file:
 
-### Configuration
-
-Create a `.env` file with your settings:
-
-```bash
-# Required
-CODEBASE_PATH=/path/to/your/repository
-EMBEDDING_PROVIDER=gemini
-GEMINI_API_KEY=your_api_key_here
-QDRANT_URL=http://localhost:6333
-
-# Optional
-INDEX_BATCH_SIZE=50
-INDEX_CONCURRENCY=5
-LOG_LEVEL=info
-```
-
-### Using with Claude Desktop
-
-Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
 
 ```json
 {
   "mcpServers": {
     "codebase-index": {
-      "command": "node",
-      "args": ["/path/to/mcp-codebase-index/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@itseasy21/mcp-codebase-index"],
       "env": {
-        "CODEBASE_PATH": "/path/to/your/repository",
+        "CODEBASE_PATH": "/absolute/path/to/your/repository",
         "EMBEDDING_PROVIDER": "gemini",
-        "GEMINI_API_KEY": "your_api_key_here",
+        "GEMINI_API_KEY": "your-api-key-here",
         "QDRANT_URL": "http://localhost:6333"
       }
     }
@@ -116,139 +77,221 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
 }
 ```
 
-## MCP Tools
+**For Qdrant Cloud**, use:
+```json
+{
+  "mcpServers": {
+    "codebase-index": {
+      "command": "npx",
+      "args": ["-y", "@itseasy21/mcp-codebase-index"],
+      "env": {
+        "CODEBASE_PATH": "/absolute/path/to/your/repository",
+        "EMBEDDING_PROVIDER": "gemini",
+        "GEMINI_API_KEY": "your-api-key-here",
+        "QDRANT_URL": "https://your-cluster.cloud.qdrant.io",
+        "QDRANT_API_KEY": "your-qdrant-api-key"
+      }
+    }
+  }
+}
+```
 
-The server provides these fully functional tools:
+### 4. Restart Claude Desktop
+
+The server will automatically start indexing your codebase on first run.
+
+## Usage
+
+Once configured, you can ask Claude to search your codebase:
+
+**Example queries:**
+- "Find the authentication middleware"
+- "Show me database connection code"
+- "Where is the user validation logic?"
+- "Find API endpoint handlers"
+- "Show me error handling utilities"
+
+**Advanced usage:**
+- "Search for 'rate limiting' in TypeScript files"
+- "Find functions related to payment processing in the /src/api directory"
+- "Show me recent changes (reindex first)"
+
+## Available Tools
+
+The MCP server provides these tools to Claude:
 
 ### `codebase_search`
-Search the indexed codebase using semantic search.
+Search your codebase using natural language or code queries.
 
-**Input:**
-- `query` (string, required): Natural language or code query
-- `limit` (number): Maximum results (default: 10)
-- `threshold` (number): Similarity threshold 0-1 (default: 0.7)
-- `fileTypes` (string[]): Filter by file extensions
-- `paths` (string[]): Filter by paths
-- `includeContext` (boolean): Include surrounding code
+**Parameters:**
+- `query` (required) - Your search query
+- `limit` - Number of results (default: 10)
+- `threshold` - Similarity threshold 0-1 (default: 0.7)
+- `fileTypes` - Filter by extensions (e.g., `[".ts", ".js"]`)
+- `paths` - Filter by paths (e.g., `["src/api"]`)
+- `includeContext` - Include surrounding code (default: true)
 
 ### `indexing_status`
-Get current indexing status and progress.
-
-**Input:**
-- `detailed` (boolean): Include per-file details
+Check indexing progress and statistics.
 
 ### `reindex`
-Trigger full or partial reindexing.
+Re-index your codebase (useful after pulling changes).
 
-**Input:**
-- `mode` (string): 'full', 'incremental', or 'file'
-- `paths` (string[]): Specific files/folders to reindex
-- `force` (boolean): Force reindex even if unchanged
+**Parameters:**
+- `mode` - 'full', 'incremental', or 'file'
+- `paths` - Specific files to reindex (optional)
+- `force` - Force reindex even if unchanged
 
 ### `configure_indexer`
-Update indexer configuration at runtime.
-
-### `clear_index`
-Clear all indexed data and reset.
+Update indexer settings at runtime.
 
 ### `validate_config`
-Test configuration and connections.
+Test your configuration and connections.
 
-## Architecture
+### `clear_index`
+Clear all indexed data and start fresh.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     MCP Client (Claude/Roo)                  │
-└─────────────────────┬───────────────────────────────────────┘
-                      │ MCP Protocol
-┌─────────────────────▼───────────────────────────────────────┐
-│                  MCP Server (TypeScript)                     │
-│  ┌──────────────┬──────────────┬──────────────────────┐     │
-│  │ Code Parser  │  Embedding   │   Vector Storage     │     │
-│  │ (Tree-sitter)│  Generator   │   (Qdrant Client)    │     │
-│  └──────┬───────┴──────┬───────┴──────────┬───────────┘     │
-└─────────┼──────────────┼──────────────────┼─────────────────┘
-          │              │                  │
-    ┌─────▼─────┐  ┌────▼─────┐      ┌────▼─────┐
-    │Tree-sitter│  │Embedding │      │  Qdrant  │
-    │ Grammars  │  │Providers │      │ Database │
-    │  (10+)    │  │(Gemini/  │      │(Cloud/   │
-    │           │  │OpenAI/   │      │ Docker)  │
-    │           │  │ Ollama)  │      │          │
-    └───────────┘  └──────────┘      └──────────┘
+## Configuration Reference
+
+### Required Settings
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `CODEBASE_PATH` | Absolute path to your repository | `/Users/you/projects/myapp` |
+| `EMBEDDING_PROVIDER` | Provider to use | `gemini`, `openai`, or `ollama` |
+| `QDRANT_URL` | Qdrant instance URL | `http://localhost:6333` |
+
+### Provider-Specific Settings
+
+**For Gemini:**
+```bash
+GEMINI_API_KEY=your-api-key
 ```
 
-## Development Roadmap
+**For OpenAI:**
+```bash
+OPENAI_API_KEY=your-api-key
+OPENAI_MODEL=text-embedding-3-small  # or text-embedding-3-large
+```
 
-See [PLAN.md](./PLAN.md) for the complete implementation plan.
+**For Ollama:**
+```bash
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=nomic-embed-text
+```
 
-### Phase 1: Foundation ✅
-- Project setup and infrastructure
-- Configuration system
-- Basic MCP server
+### Optional Settings
 
-### Phase 2: Code Parsing ✅
-- Tree-sitter integration with 10+ languages
-- Language-specific extractors (TypeScript, Python, etc.)
-- Markdown header-based parsing
-- Fallback chunking for unsupported files
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `COLLECTION_NAME` | Qdrant collection name | `codebase_index` |
+| `INDEX_BATCH_SIZE` | Files per batch | `50` |
+| `INDEX_CONCURRENCY` | Parallel processing limit | `5` |
+| `LOG_LEVEL` | Logging detail | `info` |
+| `QDRANT_API_KEY` | For Qdrant Cloud | - |
 
-### Phase 3: Embeddings ✅
-- Google Gemini provider (free tier available)
-- OpenAI provider (text-embedding-3-small/large)
-- Ollama provider (local models)
-- Batch embedding support with error handling
+## Supported Languages
 
-### Phase 4: Storage Layer ✅
-- Qdrant vector database integration
-- Collection management (create, delete, info)
-- Vector operations (upsert, search, delete)
-- Batch operations with optimizations
+- TypeScript/JavaScript
+- Python
+- Java
+- Go
+- Rust
+- C/C++
+- C#
+- Ruby
+- PHP
+- Markdown
 
-### Phase 5: Indexing Engine ✅
-- Real-time file watching with chokidar
-- Incremental indexing (only changed files)
-- Git branch change detection
-- Priority queue for efficient processing
+Unsupported languages fall back to intelligent text chunking.
 
-### Phase 6: Search & Ranking ✅
-- Semantic vector search
-- Advanced result ranking with multiple factors
-- Context extraction (surrounding code)
-- Search result caching
+## Troubleshooting
 
-### Phase 7: Status Management ✅
-- Real-time progress tracking
-- Statistics (files, blocks, languages)
-- Error reporting and retry tracking
-- Detailed status display
+### "Cannot find module" errors
+```bash
+npm install -g @itseasy21/mcp-codebase-index
+```
 
-### Phase 8: MCP Tools ✅
-- All 6 tools fully implemented
-- Input validation with Zod schemas
-- Comprehensive error handling
-- Status icons and formatted output
+### Indexing is slow
+Reduce `INDEX_CONCURRENCY` or increase `INDEX_BATCH_SIZE` in your configuration.
 
-### Phase 9: Testing ✅
-- Vitest test framework
-- Unit tests for all major components
-- Integration tests for end-to-end workflows
-- 70% coverage thresholds
+### "Connection refused" to Qdrant
+- Ensure Qdrant is running: `docker ps` or check Qdrant Cloud status
+- Verify `QDRANT_URL` is correct
+- For cloud: ensure `QDRANT_API_KEY` is set
 
-### Phase 10: Documentation & Release (Next)
-- Enhanced documentation
-- Usage examples
-- Performance optimization
-- npm publish preparation
+### No search results
+- Check indexing status using the `indexing_status` tool
+- Try reindexing with the `reindex` tool
+- Lower the similarity `threshold` in your search
+
+### Rate limiting errors
+If using a free API tier:
+- Reduce `INDEX_CONCURRENCY` to 1-2
+- Increase `INDEX_BATCH_SIZE` to reduce API calls
+
+## How It Works
+
+1. **Code Parsing**: Uses Tree-sitter to parse code into meaningful chunks (functions, classes, etc.)
+2. **Embedding Generation**: Converts code into vector embeddings using your chosen AI provider
+3. **Vector Storage**: Stores embeddings in Qdrant for fast similarity search
+4. **Semantic Search**: Finds relevant code by comparing query embeddings to stored code embeddings
+5. **Real-time Updates**: Watches for file changes and automatically reindexes
+
+## Performance Tips
+
+- **For large codebases (1000+ files)**: Use `INDEX_BATCH_SIZE=100` and `INDEX_CONCURRENCY=3`
+- **For fast iteration**: Use Ollama with local models (no API calls)
+- **For best quality**: Use OpenAI's `text-embedding-3-large` model
+- **For free usage**: Use Google Gemini (generous free tier)
+
+## Privacy & Security
+
+- All code indexing happens locally or in your chosen infrastructure
+- API keys are only used for embedding generation
+- Code is never sent to third parties (except for embedding generation)
+- Self-hosted Ollama option keeps everything completely local
+
+## Examples
+
+### Example 1: Find Authentication Code
+```
+You: "Find all authentication middleware in the codebase"
+Claude: [Uses codebase_search tool with query "authentication middleware"]
+```
+
+### Example 2: Reindex After Git Pull
+```
+You: "I just pulled new changes, please reindex"
+Claude: [Uses reindex tool with mode "incremental"]
+```
+
+### Example 3: Search Specific Directory
+```
+You: "Search for error handlers in the src/api directory"
+Claude: [Uses codebase_search with query "error handlers" and paths ["src/api"]]
+```
 
 ## Contributing
 
-Contributions are welcome! Please read [PLAN.md](./PLAN.md) for implementation guidelines.
+Contributions are welcome! Please visit our [GitHub repository](https://github.com/itseasy21/mcp-codebase-index) to:
+- Report issues
+- Submit pull requests
+- Request features
+- Ask questions
 
 ## License
 
-MIT
+MIT License - see [LICENSE](LICENSE) file for details
 
 ## Support
 
-For issues and questions, please open a GitHub issue.
+- **Issues**: [GitHub Issues](https://github.com/itseasy21/mcp-codebase-index/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/itseasy21/mcp-codebase-index/discussions)
+
+## Acknowledgments
+
+Built with:
+- [Model Context Protocol](https://modelcontextprotocol.io/) by Anthropic
+- [Tree-sitter](https://tree-sitter.github.io/) for code parsing
+- [Qdrant](https://qdrant.tech/) for vector storage

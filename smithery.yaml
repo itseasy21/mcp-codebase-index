@@ -73,7 +73,7 @@ startCommand:
     |-
       (config) => ({
         command: 'npx',
-        args: ['-y', '@itseasy21/mcp-codebase-index'],
+        args: ['-y', 'mcp-codebase-index'],
         env: {
           CODEBASE_PATH: config.codebasePath,
           EMBEDDING_PROVIDER: config.embeddingProvider,

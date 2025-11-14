@@ -71,12 +71,13 @@ export interface VectorMetadata {
   line: number;
   endLine: number;
   code: string;
-  type: CodeBlockType;
+  type: CodeBlockType | 'metadata'; // Support metadata markers
   name: string;
   language: string;
   hash: string;
   indexed_at: string;
   complexity?: number;
+  pathSegments?: Record<string, string>; // Path decomposed: pathSegments.0, pathSegments.1, etc.
   metadata?: Record<string, string | number | boolean | null>;
 }
 

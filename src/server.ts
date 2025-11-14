@@ -25,6 +25,7 @@ interface CodebaseSearchArgs {
   threshold?: number;
   fileTypes?: string[];
   paths?: string[];
+  directoryPrefix?: string; // NEW: Filter by directory (e.g., "src/components")
   languages?: string[];
   includeContext?: boolean;
   contextLines?: number;
@@ -140,6 +141,10 @@ function registerToolHandlers(server: Server, orchestrator: Orchestrator): void 
               type: 'array',
               items: { type: 'string' },
               description: 'Filter by file paths',
+            },
+            directoryPrefix: {
+              type: 'string',
+              description: 'Filter by directory prefix (e.g., "src/components" for all files in that directory)',
             },
             includeContext: {
               type: 'boolean',
@@ -342,6 +347,7 @@ async function handleCodebaseSearch(orchestrator: Orchestrator, args: CodebaseSe
     threshold: args.threshold || 0.7,
     fileTypes: args.fileTypes,
     paths: args.paths,
+    directoryPrefix: args.directoryPrefix, // NEW: Directory-based filtering
     languages: args.languages,
     includeContext: args.includeContext ?? true,
     contextLines: args.contextLines || 3,

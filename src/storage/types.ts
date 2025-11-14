@@ -49,6 +49,11 @@ export interface SearchOptions {
   filter?: SearchFilter;
   withPayload?: boolean;
   withVector?: boolean;
+  params?: {
+    hnsw_ef?: number; // HNSW search width (higher = better recall, slower)
+    exact?: boolean; // Use exact search instead of HNSW approximation
+    [key: string]: any; // Allow other Qdrant parameters
+  };
 }
 
 /**

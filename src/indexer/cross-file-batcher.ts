@@ -9,6 +9,7 @@ import type { Point } from '../storage/types.js';
 import type { CodeBlock } from '../types/models.js';
 import { logger } from '../utils/logger.js';
 import { hashContent } from '../utils/file-utils.js';
+import { decomposePathIntoSegments } from '../utils/path-utils.js';
 import { chunkQualityFilter } from './chunk-quality-filter.js';
 import { embeddingEnricher } from './embedding-enricher.js';
 
@@ -158,6 +159,9 @@ export class CrossFileBatcher {
         const locationHash = hashContent(`${block.file}:${block.line}:${block.endLine}`);
         const pointId = hashToUUID(locationHash);
 
+        // Decompose file path into indexed segments for efficient directory filtering
+        const pathSegments = decomposePathIntoSegments(block.file);
+
         return {
           id: pointId,
           vector: embeddingResult.embeddings[index].values,
@@ -169,6 +173,7 @@ export class CrossFileBatcher {
             type: block.type,
             name: block.name,
             language: block.language,
+            pathSegments, // Add path segments for directory-based filtering
             metadata: block.metadata || {},
             hash: hashContent(block.code),
             indexed_at: new Date().toISOString(),

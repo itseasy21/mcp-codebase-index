@@ -2,6 +2,8 @@
 
 A powerful Model Context Protocol (MCP) server that enables AI assistants to search and understand your codebase using semantic search. Find code using natural language queries like "authentication logic" or "database connection handling" instead of exact text matching.
 
+[![smithery badge](https://smithery.ai/badge/@itseasy21/mcp-codebase-index)](https://smithery.ai/server/@itseasy21/mcp-codebase-index)
+
 ## Features
 
 - 🔍 **Semantic Code Search** - Search using natural language, not just keywords

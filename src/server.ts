@@ -398,7 +398,7 @@ async function handleCodebaseSearch(orchestrator: Orchestrator, args: CodebaseSe
   // Warn if no exact matches found
   if (!hasExactMatches && response.results.length > 0) {
     summary.push(
-      '⚠️  **Note:** No exact text matches found. Results below are based on semantic similarity only.',
+      'WARNING: No exact text matches found. Results below are based on semantic similarity only.',
       'Consider: (1) Reindexing if files have changed, (2) Using simpler search terms, (3) Checking if the code exists in your codebase.',
       ''
     );
@@ -730,7 +730,7 @@ async function handleClearIndex(orchestrator: Orchestrator, args: ClearIndexArgs
       content: [
         {
           type: 'text',
-          text: '# Clear Index\n\n⚠️ **Safety check required**\n\nTo clear the index, you must set `confirm: true`.\n\nThis will permanently delete all indexed data.',
+          text: '# Clear Index\n\nWARNING: Safety check required\n\nTo clear the index, you must set `confirm: true`.\n\nThis will permanently delete all indexed data.',
         },
       ],
     };

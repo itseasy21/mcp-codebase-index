@@ -229,7 +229,22 @@ export class CrossFileBatcher {
   }
 
   /**
+   * Reset cumulative statistics
+   * Call this when starting a new indexing session to reset lifetime counters
+   */
+  resetStats() {
+    this.stats = {
+      totalBlocks: 0,
+      filteredBlocks: 0,
+      enrichedBlocks: 0,
+    };
+    logger.debug('Cross-file batcher statistics reset');
+  }
+
+  /**
    * Get statistics about pending batch and filtering
+   * Note: totalProcessed, filteredBlocks, and enrichedBlocks are cumulative lifetime statistics
+   * Call resetStats() to reset these counters for a new indexing session
    */
   getStats() {
     const files = new Set(this.pendingBlocks.map(b => b.file));

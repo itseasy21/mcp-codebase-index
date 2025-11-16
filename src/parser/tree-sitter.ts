@@ -7,6 +7,8 @@ import { languageRegistry } from './language-registry.js';
 import type { CodeExtractor } from './extractors/base.js';
 import { TypeScriptExtractor, JavaScriptExtractor } from './extractors/typescript.js';
 import { PythonExtractor } from './extractors/python.js';
+import { JavaExtractor } from './extractors/java.js';
+import { GoExtractor } from './extractors/go.js';
 import type { CodeBlock } from '../types/models.js';
 import { logger } from '../utils/logger.js';
 import { ParsingError } from '../utils/errors.js';
@@ -38,6 +40,14 @@ export class TreeSitterParser {
     // Python
     const pyExtractor = new PythonExtractor();
     this.extractors.set('python', pyExtractor);
+
+    // Java
+    const javaExtractor = new JavaExtractor();
+    this.extractors.set('java', javaExtractor);
+
+    // Go
+    const goExtractor = new GoExtractor();
+    this.extractors.set('go', goExtractor);
 
     logger.debug(`Registered ${this.extractors.size} code extractors`);
   }

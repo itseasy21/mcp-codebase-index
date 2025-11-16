@@ -13,6 +13,7 @@ export interface SearchQuery {
   threshold?: number;
   fileTypes?: string[];
   paths?: string[];
+  directoryPrefix?: string; // NEW: Filter by directory prefix (e.g., "src/components")
   languages?: string[];
   blockTypes?: CodeBlockType[];
   includeContext?: boolean;

@@ -36,7 +36,8 @@ export type CodeBlockType =
   | 'trait'
   | 'impl'
   | 'markdown_section'
-  | 'chunk'; // fallback chunking
+  | 'chunk' // fallback chunking
+  | 'metadata'; // metadata markers for enriched embeddings
 
 /**
  * Metadata for code blocks
@@ -77,6 +78,7 @@ export interface VectorMetadata {
   hash: string;
   indexed_at: string;
   complexity?: number;
+  pathSegments?: Record<string, string>; // Path decomposed: pathSegments.0, pathSegments.1, etc.
   metadata?: Record<string, string | number | boolean | null>;
 }
 

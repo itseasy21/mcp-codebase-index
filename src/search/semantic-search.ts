@@ -7,6 +7,7 @@ import type { Storage } from '../storage/index.js';
 import type { SearchQuery, EnhancedSearchResult } from './types.js';
 import { logger } from '../utils/logger.js';
 import { SearchError } from '../utils/errors.js';
+import { buildPathPrefixFilter } from '../utils/path-utils.js';
 
 /**
  * Semantic search implementation
@@ -36,7 +37,7 @@ export class SemanticSearch {
       // Build filter
       const filter = this.buildFilter(query);
 
-      // Search in Qdrant
+      // Search in Qdrant with HNSW optimization
       const searchStartTime = Date.now();
       const qdrantResults = await this.storage.vectors.search(
         this.collectionName,
@@ -47,6 +48,11 @@ export class SemanticSearch {
           filter,
           withPayload: true,
           withVector: false,
+          // HNSW search parameters for optimal query performance
+          params: {
+            hnsw_ef: 128, // Query-time search width (balance between speed and recall)
+            exact: false, // Use approximate search for speed
+          } as any,
         }
       );
       const searchTime = Date.now() - searchStartTime;
@@ -83,6 +89,20 @@ export class SemanticSearch {
    */
   private buildFilter(query: SearchQuery): any {
     const conditions: any[] = [];
+    const mustNotConditions: any[] = [];
+
+    // NEW: Always exclude metadata points from search results
+    mustNotConditions.push({
+      key: 'type',
+      match: { value: 'metadata' },
+    });
+
+    // NEW: Filter by directory prefix (most efficient filter)
+    if (query.directoryPrefix) {
+      const pathSegmentFilters = buildPathPrefixFilter(query.directoryPrefix);
+      conditions.push(...pathSegmentFilters);
+      logger.debug(`Filtering by directory prefix: ${query.directoryPrefix} (${pathSegmentFilters.length} segments)`);
+    }
 
     // Filter by file types
     if (query.fileTypes && query.fileTypes.length > 0) {
@@ -146,14 +166,20 @@ export class SemanticSearch {
       }
     }
 
-    // Return filter if we have conditions
-    if (conditions.length === 0) {
+    // Build final filter
+    if (conditions.length === 0 && mustNotConditions.length === 0) {
       return undefined;
     }
 
-    return {
-      must: conditions,
-    };
+    const filter: any = {};
+    if (conditions.length > 0) {
+      filter.must = conditions;
+    }
+    if (mustNotConditions.length > 0) {
+      filter.must_not = mustNotConditions;
+    }
+
+    return filter;
   }
 
   /**

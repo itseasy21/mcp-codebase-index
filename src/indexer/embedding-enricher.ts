@@ -225,8 +225,8 @@ export class EmbeddingEnricher {
     return comments
       // Remove comment markers
       .replace(/\/\*\*?|\*\/|\/\/|^\s*\*\s?/gm, '')
-      // Remove @tags
-      .replace(/@\w+/g, '')
+      // Remove JSDoc tags (but not email addresses) - only match @tag at word boundaries
+      .replace(/@\w+(?=\s|$)/g, '')
       // Collapse whitespace
       .replace(/\s+/g, ' ')
       .trim()
@@ -236,14 +236,18 @@ export class EmbeddingEnricher {
 
   /**
    * Get appropriate article for a word
+   * Note: Simple heuristic based on first letter; edge cases like "hour", "utility" may be incorrect
    */
   private getArticle(word: string): string {
+    if (!word || word.length === 0) return 'a';
     const vowels = ['a', 'e', 'i', 'o', 'u'];
     return vowels.includes(word[0].toLowerCase()) ? 'an' : 'a';
   }
 
   /**
    * Batch enrich multiple blocks
+   * Note: Processes all blocks in memory sequentially. For very large batches (>10,000 blocks),
+   * consider processing in smaller chunks to avoid memory issues.
    */
   enrichBatch(blocks: CodeBlock[], options: EnrichmentOptions = {}): string[] {
     return blocks.map(block => this.enrich(block, options));

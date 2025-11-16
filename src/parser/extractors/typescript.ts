@@ -519,6 +519,8 @@ export class TypeScriptExtractor extends BaseExtractor {
 
   /**
    * Extract test block (describe, it, test, etc.)
+   * Note: Only matches direct function calls (e.g., describe(), it())
+   * Does not match namespaced calls (e.g., jest.describe(), mocha.it())
    */
   private extractTestBlock(node: Parser.SyntaxNode): ExtractionResult | null {
     // Only extract top-level test framework calls
@@ -527,7 +529,7 @@ export class TypeScriptExtractor extends BaseExtractor {
 
     const functionName = functionNode.text;
 
-    // Check if it's a test framework function
+    // Check if it's a test framework function (direct calls only, not namespaced)
     const testFunctions = ['describe', 'it', 'test', 'beforeEach', 'beforeAll', 'afterEach', 'afterAll'];
     if (!testFunctions.includes(functionName)) {
       return null;

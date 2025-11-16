@@ -17,6 +17,7 @@ export interface ChunkQualityMetrics {
  */
 export class ChunkQualityFilter {
   private readonly MIN_QUALITY_SCORE = 0.3;
+  private readonly CLOSING_TAG_THRESHOLD = 0.7; // 70% threshold for closing tags
 
   /**
    * Determine if a chunk is high enough quality to index
@@ -131,8 +132,8 @@ export class ChunkQualityFilter {
     const tokenPattern = /\b[a-zA-Z_$][a-zA-Z0-9_$]*\b|"[^"]*"|'[^']*'|`[^`]*`/g;
     const tokens = code.match(tokenPattern) || [];
 
-    // Filter out common noise tokens
-    const noiseTokens = new Set(['div', 'span', 'var', 'let', 'const', 'if', 'else', 'return']);
+    // Filter out only language keywords (not HTML elements that could be valid variable names)
+    const noiseTokens = new Set(['var', 'let', 'const', 'if', 'else', 'return', 'function', 'class']);
     const meaningfulTokens = tokens.filter(t => !noiseTokens.has(t.toLowerCase()));
 
     return meaningfulTokens.length;
@@ -154,8 +155,8 @@ export class ChunkQualityFilter {
       }
     }
 
-    // If more than 70% of lines are closing syntax, consider it trivial
-    return lines.length > 0 && (closingLines / lines.length) > 0.7;
+    // If more than threshold of lines are closing syntax, consider it trivial
+    return lines.length > 0 && (closingLines / lines.length) > this.CLOSING_TAG_THRESHOLD;
   }
 
   /**

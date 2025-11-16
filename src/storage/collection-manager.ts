@@ -86,9 +86,9 @@ export class CollectionManager {
         logger.debug(`Created payload index: ${index.field}`);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        // Ignore "already exists" errors
-        if (!message.includes('already exists') && !message.includes('Already exists')) {
-          logger.warn(`Failed to create payload index ${index.field}: ${message}`);
+        // Ignore "already exists" errors (case-insensitive)
+        if (!message.toLowerCase().includes('already exists')) {
+          logger.debug(`Payload index ${index.field} creation skipped: ${message}`);
         }
       }
     }

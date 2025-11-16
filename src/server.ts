@@ -361,8 +361,8 @@ async function handleCodebaseSearch(orchestrator: Orchestrator, args: CodebaseSe
       '',
     ];
 
-    // Prefer showing context over raw code for better readability
-    // Context shows the code chunk within surrounding file lines
+    // Show context if available (code with surrounding lines), otherwise raw code chunk
+    // This avoids duplicate displays while providing better readability
     if (result.context) {
       lines.push(
         '```' + (result.language || ''),
@@ -378,22 +378,11 @@ async function handleCodebaseSearch(orchestrator: Orchestrator, args: CodebaseSe
       );
     }
 
-    if (result.relevanceFactors) {
-      const factors = result.relevanceFactors;
-      const factorLines = [];
-      if (factors.exactMatch) factorLines.push('- Exact match');
-      if (factors.nameMatch) factorLines.push('- Name match');
-      if (factorLines.length > 0) {
-        lines.push('', '**Relevance:**', ...factorLines);
-      }
-    }
-
     return lines.join('\n');
   });
 
-  // Check if any results contain exact matches
+  // Check if any results contain exact text matches in code or context
   const hasExactMatches = response.results.some(r =>
-    r.relevanceFactors?.exactMatch ||
     r.code?.toLowerCase().includes(response.query.toLowerCase()) ||
     r.context?.toLowerCase().includes(response.query.toLowerCase())
   );

@@ -396,7 +396,7 @@ export class JavaExtractor extends BaseExtractor {
 
       // Logical operators
       if (n.type === 'binary_expression') {
-        const operator = n.children.find(child => child.type === '&&' || child.type === '||');
+        const operator = n.children.find(child => child.text === '&&' || child.text === '||');
         if (operator) {
           complexity++;
         }

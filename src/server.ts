@@ -551,11 +551,17 @@ async function handleReindex(orchestrator: Orchestrator, args: ReindexArgs) {
       case 'full':
         logger.info('Starting full reindex...');
         await indexer.indexAll({ force: true });
+
+        // Get stats to show what was indexed
+        const state = indexer.getState();
+        const filesIndexed = state.progress.filesProcessed;
+        const blocksIndexed = state.stats.totalBlocks;
+
         return {
           content: [
             {
               type: 'text',
-              text: `# Full Reindex Complete\n\n✓ Successfully reindexed all files\n\nUse \`indexing_status\` to see detailed statistics.`,
+              text: `# Full Reindex Complete\n\n✓ Successfully reindexed ${filesIndexed} files (${blocksIndexed} code blocks)\n\nUse \`indexing_status\` to see detailed statistics.`,
             },
           ],
         };
@@ -563,11 +569,17 @@ async function handleReindex(orchestrator: Orchestrator, args: ReindexArgs) {
       case 'incremental':
         logger.info('Starting incremental reindex...');
         await indexer.indexAll({ force: false });
+
+        // Get stats to show what was indexed
+        const incrementalState = indexer.getState();
+        const incrementalFilesIndexed = incrementalState.progress.filesProcessed;
+        const incrementalBlocksIndexed = incrementalState.stats.totalBlocks;
+
         return {
           content: [
             {
               type: 'text',
-              text: `# Incremental Reindex Complete\n\n✓ Successfully indexed changed files\n\nUse \`indexing_status\` to see detailed statistics.`,
+              text: `# Incremental Reindex Complete\n\n✓ Successfully indexed ${incrementalFilesIndexed} changed files (${incrementalBlocksIndexed} code blocks total in collection)\n\nUse \`indexing_status\` to see detailed statistics.`,
             },
           ],
         };

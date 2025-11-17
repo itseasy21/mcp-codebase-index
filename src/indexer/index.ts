@@ -153,16 +153,39 @@ export class Indexer {
       this.state.progress.startTime = Date.now();
 
       logger.info('Starting full indexing...');
+      logger.info(`Base path: ${this.config.basePath}`);
+
+      // Verify base path exists
+      try {
+        const stats = await fs.stat(this.config.basePath);
+        if (!stats.isDirectory()) {
+          throw new Error(`Codebase path is not a directory: ${this.config.basePath}`);
+        }
+      } catch (error) {
+        throw new Error(`Codebase path does not exist or is not accessible: ${this.config.basePath}`);
+      }
 
       // Discover all files
       const files = await this.discoverFiles();
+      logger.info(`Discovered ${files.length} total files`);
+
+      if (files.length === 0) {
+        logger.warn('No files found to index. Check:');
+        logger.warn(`  1. Does the path contain supported files? (${this.config.basePath})`);
+        logger.warn('  2. Are files being excluded by .gitignore or .mcpignore?');
+        logger.warn('  3. Check supported languages: ts, js, py, java, go, rust, c, cpp, cs, rb, php, md');
+      }
 
       // Filter files if needed
       const filteredFiles = options.force
         ? files
         : await this.filterUnchangedFiles(files);
 
-      logger.info(`Found ${filteredFiles.length} files to index`);
+      logger.info(`Found ${filteredFiles.length} files to index (${files.length - filteredFiles.length} unchanged)`);
+
+      if (filteredFiles.length === 0 && !options.force) {
+        logger.info('All files are up to date. Use force=true to reindex anyway.');
+      }
 
       // Add to queue
       this.queue.addBatch(filteredFiles, 1, 'initial');

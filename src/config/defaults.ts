@@ -59,7 +59,7 @@ export const defaultConfig: Partial<Config> = {
     maxFileSize: 1048576, // 1MB
     respectGitignore: true,
     useMcpignore: true,
-    autoIndex: true,
+    autoIndex: true, // Auto-index on first run for better UX
     watchFiles: true,
     watchBranches: true,
     fallbackChunking: true,

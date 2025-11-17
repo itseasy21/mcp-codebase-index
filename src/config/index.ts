@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import { z } from 'zod';
+import { existsSync, statSync } from 'fs';
 import { configSchema, type Config } from './schema.js';
 import { defaultConfig } from './defaults.js';
 
@@ -10,9 +11,26 @@ dotenv.config();
  * Load configuration from environment variables
  */
 export function loadConfig(): Config {
+  const codebasePath = process.env.CODEBASE_PATH || '';
+
+  // Validate codebase path exists
+  if (codebasePath && !existsSync(codebasePath)) {
+    throw new Error(
+      `CODEBASE_PATH does not exist: ${codebasePath}\n` +
+      'Please set the CODEBASE_PATH environment variable to a valid directory path.'
+    );
+  }
+
+  if (codebasePath && !statSync(codebasePath).isDirectory()) {
+    throw new Error(
+      `CODEBASE_PATH is not a directory: ${codebasePath}\n` +
+      'Please set the CODEBASE_PATH environment variable to a valid directory path.'
+    );
+  }
+
   const config: Partial<Config> = {
     codebase: {
-      path: process.env.CODEBASE_PATH || '',
+      path: codebasePath,
     },
     embedding: {
       provider: (process.env.EMBEDDING_PROVIDER as any) || defaultConfig.embedding?.provider || 'gemini',

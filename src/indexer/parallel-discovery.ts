@@ -12,6 +12,7 @@ export interface ParallelDiscoveryConfig {
   basePath: string;
   maxConcurrentDirs?: number;
   excludeDirs?: string[];
+  timeoutMs?: number; // Maximum time for discovery
 }
 
 /**
@@ -22,6 +23,10 @@ export class ParallelFileDiscovery {
   private activeDirs = 0;
   private maxConcurrent: number;
   private excludeDirs: Set<string>;
+  private visitedDirs: Set<string> = new Set(); // Track visited dirs to avoid symlink loops
+  private fileCount = 0;
+  private dirCount = 0;
+  private progressTimer: NodeJS.Timeout | null = null;
 
   constructor(config: ParallelDiscoveryConfig) {
     this.config = config;
@@ -50,18 +55,67 @@ export class ParallelFileDiscovery {
 
     logger.info('Starting parallel file discovery...');
 
-    await this.walkParallel(this.config.basePath, files, errors);
+    // Start progress logging
+    this.startProgressLogging();
 
-    const duration = Date.now() - startTime;
-    logger.info(
-      `Parallel discovery complete: ${files.length} files found in ${duration}ms (${(files.length / (duration / 1000)).toFixed(0)} files/sec)`
-    );
+    try {
+      // Add timeout wrapper
+      const timeoutMs = this.config.timeoutMs || 120000; // Default 2 minutes
+      const discoveryPromise = this.walkParallel(this.config.basePath, files, errors);
 
-    if (errors.length > 0) {
-      logger.warn(`Encountered ${errors.length} errors during discovery`);
+      const timeoutPromise = new Promise<void>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error(
+            `File discovery timed out after ${timeoutMs / 1000}s. ` +
+            `Found ${files.length} files in ${this.dirCount} directories before timeout. ` +
+            `This may indicate a symlink loop or very large codebase.`
+          ));
+        }, timeoutMs);
+      });
+
+      await Promise.race([discoveryPromise, timeoutPromise]);
+
+      const duration = Date.now() - startTime;
+      logger.info(
+        `Parallel discovery complete: ${files.length} files found in ${duration}ms ` +
+        `(${(files.length / (duration / 1000)).toFixed(0)} files/sec, ${this.dirCount} directories scanned)`
+      );
+
+      if (errors.length > 0) {
+        logger.warn(`Encountered ${errors.length} errors during discovery:`);
+        errors.slice(0, 5).forEach(err => logger.warn(`  - ${err}`));
+        if (errors.length > 5) {
+          logger.warn(`  ... and ${errors.length - 5} more errors`);
+        }
+      }
+
+      return files;
+    } finally {
+      this.stopProgressLogging();
     }
+  }
 
-    return files;
+  /**
+   * Start periodic progress logging
+   */
+  private startProgressLogging(): void {
+    this.progressTimer = setInterval(() => {
+      logger.info(
+        `Discovery progress: ${this.fileCount} files found, ` +
+        `${this.dirCount} directories scanned, ` +
+        `${this.activeDirs} active`
+      );
+    }, 10000); // Log every 10 seconds
+  }
+
+  /**
+   * Stop progress logging
+   */
+  private stopProgressLogging(): void {
+    if (this.progressTimer) {
+      clearInterval(this.progressTimer);
+      this.progressTimer = null;
+    }
   }
 
   /**
@@ -73,6 +127,18 @@ export class ParallelFileDiscovery {
     errors: string[]
   ): Promise<void> {
     try {
+      // Resolve to real path to detect symlink loops
+      const realPath = await fs.realpath(dir);
+
+      // Check if we've already visited this directory (symlink loop detection)
+      if (this.visitedDirs.has(realPath)) {
+        logger.debug(`Skipping already visited directory: ${dir}`);
+        return;
+      }
+
+      this.visitedDirs.add(realPath);
+      this.dirCount++;
+
       const entries = await fs.readdir(dir, { withFileTypes: true });
 
       // Separate files and directories
@@ -90,11 +156,15 @@ export class ParallelFileDiscovery {
           if (!this.excludeDirs.has(entry.name)) {
             subdirs.push(join(dir, entry.name));
           }
+        } else if (entry.isSymbolicLink()) {
+          // Log symlinks for debugging
+          logger.debug(`Skipping symlink: ${join(dir, entry.name)}`);
         }
       }
 
       // Add files immediately
       files.push(...localFiles);
+      this.fileCount += localFiles.length;
 
       // Process subdirectories with concurrency control
       if (subdirs.length > 0) {
@@ -102,8 +172,13 @@ export class ParallelFileDiscovery {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      // Only log permission errors at debug level to avoid spam
+      if (message.includes('EACCES') || message.includes('EPERM')) {
+        logger.debug(`Permission denied: ${dir}`);
+      } else {
+        logger.warn(`Failed to read directory ${dir}: ${message}`);
+      }
       errors.push(`Failed to read ${dir}: ${message}`);
-      logger.warn(`Failed to read directory ${dir}: ${message}`);
     }
   }
 
